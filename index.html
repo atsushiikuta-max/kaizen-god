@@ -4,474 +4,590 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>カイゼンの神様 | 旭鉄工 観察の型で学ぶカイゼン採点ゲーム</title>
-<meta name="description" content="設備と現象から改善案を考え、上位概念で分類して採点される旭鉄工のカイゼン学習ゲーム。部署対抗ランキングつき。" />
+<meta name="description" content="設備と現象から改善案を考え、上位概念で分類して採点。3問ごとのチェックポイントを突破し、経営ダッシュボードを改善してカイゼン神様を目指す旭鉄工の学習ゲーム。" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-  body{background:#ffffff;color:#1f2937;font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif}
+  body{background:#f7f9fc;color:#1f2937;font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif}
   .card{background:#fff;border:1px solid #e5e9f0;border-radius:16px;box-shadow:0 4px 16px rgba(20,40,70,.06)}
-  .pop{animation:pop .2s ease}
-  @keyframes pop{from{transform:translateY(4px);opacity:.3}to{transform:none;opacity:1}}
-  .btn{border-radius:999px;font-weight:800;transition:.15s;cursor:pointer}
-  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .pop{animation:pop .2s ease}@keyframes pop{from{transform:translateY(4px);opacity:.3}to{transform:none;opacity:1}}
+  .btn{border-radius:999px;font-weight:800;transition:.15s;cursor:pointer}.btn:disabled{opacity:.4;cursor:not-allowed}
   textarea:focus,select:focus,input:focus{outline:2px solid #2563eb}
   .wmark{white-space:pre-wrap;word-break:break-word}
+  .chart{width:100%;height:auto;background:#fff;border:1px solid #e5e9f0;border-radius:10px}
+  .chart .ax{font-size:9px;fill:#94a3b8}.chart .lg{font-size:11px;fill:#475569}
 </style>
 </head>
 <body>
 <div id="root" class="min-h-screen"></div>
 
 <script type="text/babel" data-presets="react">
-const {useState, useEffect} = React;
+const {useState} = React;
 
-/* ===== 部署（添付の選択肢より） ===== */
-const DEPTS = [
- '経営企画部','経理・財務部','人事・総務部','営業部','戦略調達部',
- '品質保証部','本社製造部','未来ものづくり製造部','西尾鋳鍛製造部','製造エンジニアリング部'
+/* ===== 部署（添付より。未来ものづくり製造部→西尾機械製造部に変更） ===== */
+const DEPTS = ['経営企画部','経理・財務部','人事・総務部','営業部','戦略調達部','品質保証部','本社製造部','西尾機械製造部','西尾鋳鍛製造部','製造エンジニアリング部'];
+
+/* ===== 10 上位概念（参考表示用） ===== */
+const CONCEPTS = [
+ {kana:'イ',label:'要るの？',sub:'そもそも無くせないか',c:'#ef4444'},
+ {kana:'マ',label:'待ちを無くす',sub:'人・モノ・設備・承認・情報',c:'#f97316'},
+ {kana:'ド',label:'同時に行う',sub:'並行化できないか',c:'#eab308'},
+ {kana:'キ',label:'距離を短く',sub:'歩行・手・探す距離',c:'#22c55e'},
+ {kana:'フ',label:'付帯作業を無くす',sub:'記録・清掃・段取り・探し物',c:'#10b981'},
+ {kana:'キ',label:'気遣いを無くす',sub:'仕組みで楽にする',c:'#3b82f6'},
+ {kana:'ソ',label:'速度を速く',sub:'作業・搬送・判断・伝達',c:'#6366f1'},
+ {kana:'カ',label:'管理をする',sub:'標準化・見える化・異常管理',c:'#8b5cf6'},
+ {kana:'チ',label:'チョコ停を無くす',sub:'短時間停止を潰す',c:'#ec4899'},
+ {kana:'CN',label:'カーボンニュートラル',sub:'電力・エアー・CO₂',c:'#14b8a6'},
 ];
-
-/* ===== 上位概念の色（フィードバックのチップ用） ===== */
-const CMAP = {
- '要るの？':'#ef4444','待ちを無くす':'#f97316','同時に行う':'#eab308','距離を短く':'#22c55e',
- '付帯作業を無くす':'#10b981','気遣いを無くす':'#3b82f6','速度を速く':'#6366f1','管理をする':'#8b5cf6',
- 'チョコ停を無くす':'#ec4899','カーボンニュートラル':'#14b8a6','品番切替':'#0ea5e9'
-};
+const CMAP = {}; CONCEPTS.forEach(c=>CMAP[c.label]=c.c); CMAP['品番切替']='#0ea5e9';
 const Chip = ({c}) => (
  <span className="inline-block text-xs font-bold px-2 py-0.5 rounded-full mr-1 align-middle"
    style={{background:(CMAP[c]||'#64748b')+'22',color:CMAP[c]||'#475569',border:`1px solid ${(CMAP[c]||'#64748b')}55`}}>{c}</span>
 );
 
-/* ===== 12 称号（平均点で決定） ===== */
+/* ===== 12 称号（平均点） ===== */
 const RANKS = [
- {min:100,nm:'カイゼン神様',ic:'👑',c:'#f59e0b'},
- {min:95, nm:'会長',ic:'🏆',c:'#f59e0b'},
- {min:90, nm:'社長',ic:'🎖',c:'#a855f7'},
- {min:85, nm:'専務取締役',ic:'🥇',c:'#8b5cf6'},
- {min:80, nm:'取締役',ic:'🥈',c:'#6366f1'},
- {min:75, nm:'執行役員',ic:'🥉',c:'#3b82f6'},
- {min:70, nm:'部長',ic:'🏢',c:'#2563eb'},
- {min:65, nm:'次長',ic:'📊',c:'#0ea5e9'},
- {min:58, nm:'課長',ic:'📈',c:'#06b6d4'},
- {min:50, nm:'係長',ic:'📋',c:'#10b981'},
- {min:40, nm:'班長',ic:'🛠',c:'#22c55e'},
- {min:0,  nm:'一般',ic:'🔰',c:'#94a3b8'},
+ {min:90,nm:'カイゼン神様',ic:'👑',c:'#f59e0b'},{min:84,nm:'会長',ic:'🏆',c:'#f59e0b'},
+ {min:78,nm:'社長',ic:'🎖',c:'#a855f7'},{min:72,nm:'専務取締役',ic:'🥇',c:'#8b5cf6'},
+ {min:66,nm:'取締役',ic:'🥈',c:'#6366f1'},{min:60,nm:'執行役員',ic:'🥉',c:'#3b82f6'},
+ {min:54,nm:'部長',ic:'🏢',c:'#2563eb'},{min:48,nm:'次長',ic:'📊',c:'#0ea5e9'},
+ {min:42,nm:'課長',ic:'📈',c:'#06b6d4'},{min:36,nm:'係長',ic:'📋',c:'#10b981'},
+ {min:28,nm:'班長',ic:'🛠',c:'#22c55e'},{min:0,nm:'一般',ic:'🔰',c:'#94a3b8'},
 ];
-const rankOf = avg => RANKS.find(r => avg >= r.min) || RANKS[RANKS.length-1];
+const rankOf = avg => RANKS.find(r=>avg>=r.min) || RANKS[RANKS.length-1];
 
-/* ===== 問題（知識フォルダ＝上位概念・電力マトリックス・グラフの見方 を根拠に作成） ===== */
+/* ===== チェックポイント（3問ごと・累計改善額の必達ライン） ===== */
+const yenOf = score => Math.round(score/100*120000); // 1問 最大¥120,000
+const CHECKPOINTS = [{at:3,target:180000},{at:6,target:420000},{at:9,target:700000}];
+const SESSION_N = 9;
+
+/* ===== KPI 経営ダッシュボード ===== */
+const KPI_BASE = {rieki:6.5, nouki:72, furyo:8.5, seisan:58};
+function calcKPI(results){
+  let k = {...KPI_BASE};
+  results.forEach(r=>{ const d=(r.score-50)/50;
+    k.rieki+=d*1.5; k.nouki+=d*4; k.furyo-=d*1.2; k.seisan+=d*4; });
+  return {
+    rieki:Math.max(0,Math.min(30,k.rieki)), nouki:Math.max(0,Math.min(100,k.nouki)),
+    furyo:Math.max(0,Math.min(20,k.furyo)), seisan:Math.max(0,Math.min(100,k.seisan)),
+  };
+}
+
+/* ===== 類似改善事例（知識/カイゼン事例 より。写真は images/） ===== */
+const CASES = {
+ 'CT4028':{concept:'待ちを無くす',setsubi:'洗浄機',title:'チェックバルブで逆流を防止',yen:406000,
+   summary:'洗浄圧力が空気混入で不安定だった。配管にチェックバルブ(逆止弁)を付けて逆流を防止し、洗浄を10秒→5秒に短縮。',
+   imgs:[{src:'images/CT4028_before.png',cap:'改善前：空気が入り逆流'},{src:'images/CT4028_after.png',cap:'改善後：チェックバルブ設置'}]},
+ 'CT4038':{concept:'要るの？',setsubi:'加工機（手作業）',title:'不要なエアーブロー工程を廃止',yen:29232,
+   summary:'洗浄工程があるのに、わざわざエアーブローで切粉を除去していた。洗浄のみで除去できるためエアーブロー手作業を廃止。64.4→62.9秒。',
+   imgs:[{src:'images/CT4038.png',cap:'ワークを機内へ入れ切粉除去（手作業を廃止）'}]},
+ 'CT4004':{concept:'同時に行う',setsubi:'ボール盤',title:'検査治具にセンサー、セットと同時に起動',yen:116928,
+   summary:'最終工程で「検査→脱着→起動」と手作業。検査治具にセンサーを付け、ワークセットと同時に設備が起動するよう改善。0.8秒短縮。',
+   imgs:[{src:'images/CT4004.png',cap:'改善前後：①検査⇒②脱着⇒③起動 → ①脱着⇒②検査＋起動'}]},
+};
+
+/* ===== 問題（知識フォルダを根拠に作成。9問＝3チェックポイント） ===== */
+const Q = (o)=>o;
 const QUESTIONS = [
- {
-  id:'q1', type:'対策案提示', setsubi:'コンプレッサーを使用するエアーブロー工程付きの加工機',
+ Q({id:'q1',type:'対策案提示',setsubi:'コンプレッサーを使用するエアーブロー工程付きの加工機',
   genshou:['CTは問題ない','昼休み1時間、生産終了後2時間も設備の電源はON','エアーブロー用ソレノイドは待機中も加圧状態','コンプレッサーの電力使用量が高い','エアー漏れは確認されていない'],
   toi:'この状況に対して考えられる改善案をできるだけ多く挙げてください。上位概念（例：要るの？、待ちを無くす、管理をする 等）もあわせて回答してください。',
-  keyConcept:'待ちを無くす', graphs:['電力消費','状態履歴','停止要因別詳細'],
+  keyConcept:'待ちを無くす', graph:{kind:'power',note:'昼休み(12-13時)・終業後(17時〜)も電源ON＝待機電力。ここの無駄に注目。'},
+  cases:['CT4038','CT4028'],
   points:[
    {c:'待ちを無くす',key:true,t:'昼休み・終業後に電源OFF（電源BOX OFF・非常停止で待機電力を落とす）',kw:['電源','off','切','休憩','昼休み','終業','終了','非常停止','待機電力','電源box']},
    {c:'待ちを無くす',key:true,t:'エアーストップバルブを閉める',kw:['バルブ','ストップ','閉','エアー止','元栓']},
    {c:'要るの？',t:'不要なエアーブロー工程を廃止する',kw:['廃止','無く','なくす','やめ','不要','要らな']},
    {c:'要るの？',t:'エアーブロー時間を短縮する',kw:['短縮','短く','時間','減ら']},
    {c:'管理をする',t:'ソレノイド・圧力・流量を適正化する',kw:['ソレノイド','圧力','流量','適正','調整','設定','レギュレータ']},
-  ],
- },
- {
-  id:'q2', type:'上位概念と対策', setsubi:'コンベアー', lens:'待ちを無くす',
+  ]}),
+ Q({id:'q2',type:'上位概念と対策',setsubi:'コンベアー',lens:'待ちを無くす',
   toi:'この設備に対して有効な「待ちを無くす」に該当する改善案を3つ以上、具体的に挙げてください。（例：「タイマーを付ける」のように具体的に）',
-  keyConcept:'待ちを無くす', graphs:['状態履歴','電力消費'],
+  keyConcept:'待ちを無くす', graph:{kind:'power',note:'コンベアが停止中も回り続けて待機電力が発生。停止している時間帯に注目。'},
+  cases:['CT4028'],
   points:[
    {c:'待ちを無くす',key:true,t:'コンベアにタイマーを設定して停止時に自動停止する',kw:['タイマー','自動停止','停止']},
    {c:'待ちを無くす',key:true,t:'ワークが無い時はコンベアを停止する／センサー連動で必要な時だけ動かす',kw:['ワーク','無い','センサー','連動','必要','だけ','検知']},
    {c:'待ちを無くす',t:'停止中の空運転を無くす',kw:['空運転','停止中','空回り','無駄']},
    {c:'待ちを無くす',t:'前工程との搬送タイミングを見直して待機時間を減らす',kw:['タイミング','前工程','待機','搬送','起動待ち']},
    {c:'待ちを無くす',t:'複数台のコンベアをまとめて制御する',kw:['まとめ','複数','一括','制御']},
-  ],
- },
- {
-  id:'q3', type:'グラフの読み方', setsubi:'加工機（CTヒストグラム）',
+  ]}),
+ Q({id:'q3',type:'グラフの読み方',setsubi:'加工機（CTヒストグラム）',
   genshou:['CTヒストグラムに大きな山が2つある'],
   toi:'CTヒストグラムで大きな山が2つある場合、何が考えられますか？考えられる要因をできるだけ多く挙げてください。',
-  keyConcept:'品番切替', graphs:['CT時系列','停止要因別詳細','状態履歴'],
+  keyConcept:'品番切替', graph:{kind:'hist',variant:'bimodal',note:'山が2つ＝2つの条件が混在。まず「品番切替が適切か」を疑う（iXacsの品番切替操作）。'},
+  cases:[],
   points:[
-   {c:'品番切替',key:true,t:'【最優先】品番切替が適切にできていない（iXacsの品番切替操作・設定CTの異なる品番の混在を疑う）',kw:['品番','切替','切り替え','品種','設定ct混','2品番']},
+   {c:'品番切替',key:true,t:'【最優先】品番切替が適切にできていない（iXacsの品番切替操作・設定CTの異なる品番の混在）',kw:['品番','切替','切り替え','品種','設定ct混','2品番']},
    {c:'管理をする',t:'昼勤と夜勤／ベテランと新人など作業者ごとの差（習熟度）',kw:['作業者','昼勤','夜勤','ベテラン','新人','習熟','人によ']},
    {c:'チョコ停を無くす',t:'ワーク引っかかり等の定期的なトラブル・チョコ停で遅い山ができる',kw:['引っかかり','トラブル','チョコ停','詰まり','停止','ひっかかり']},
    {c:'管理をする',t:'自動運転と手動介入時が混在している',kw:['自動','手動','介入','混在']},
    {c:'管理をする',t:'刃具交換前後や追加作業でCTが異なる',kw:['刃具','交換','前後','追加','工程追加']},
-  ],
- },
- {
-  id:'q4', type:'上位概念と対策', setsubi:'エアーシリンダ', lens:'要るの？',
+  ]}),
+ Q({id:'q4',type:'上位概念と対策',setsubi:'エアーシリンダ',lens:'要るの？',
   toi:'この設備に対して有効な「要るの？」（その動作・設備そのものを無くせないか）に該当する改善案を3つ以上挙げてください。',
-  keyConcept:'要るの？', graphs:['電力消費','状態履歴'],
+  keyConcept:'要るの？', graph:{kind:'power',note:'シリンダの待機電力。まず「その動作・設備が要るのか」を問う。'},
+  cases:['CT4038'],
   points:[
    {c:'要るの？',key:true,t:'エアーシリンダを廃止して、重力・バネ・カム／からくりで動かす',kw:['廃止','からくり','重力','バネ','カム','無く']},
    {c:'要るの？',t:'シリンダ径を小さくする',kw:['径','小さく','細']},
    {c:'要るの？',t:'シリンダ本数を減らす',kw:['本数','減ら','数']},
    {c:'要るの？',t:'必要ない押し出し動作を廃止する',kw:['押し出し','動作','廃止','不要','要らな']},
    {c:'要るの？',t:'手動または既存動作と兼用できないか考える',kw:['手動','兼用','既存','まとめ']},
-  ],
- },
- {
-  id:'q5', type:'上位概念と対策', setsubi:'品質チェック工程', lens:'同時に行う',
+  ]}),
+ Q({id:'q5',type:'上位概念と対策',setsubi:'品質チェック工程',lens:'同時に行う',
   toi:'この上位概念「同時に行う」に該当する改善案を3つ以上、具体的に挙げてください。',
-  keyConcept:'同時に行う', graphs:['停止要因別詳細','状態履歴'],
+  keyConcept:'同時に行う', graph:{kind:'bar',data:[['検査',9],['加工',5],['段取り',3],['その他',2]],hi:0,note:'検査が突出。検査を主作業と「同時に」できないかを考える。'},
+  cases:['CT4004'],
   points:[
    {c:'同時に行う',key:true,t:'爪高さと爪Rを同時測定できる治具に変更する（複数項目を同時測定）',kw:['同時測定','治具','爪','複数','同時']},
    {c:'同時に行う',t:'ワークセットと同時に検査する',kw:['ワークセット','セット','同時','検査']},
    {c:'同時に行う',t:'測定と記録を同時に行う',kw:['測定','記録','同時']},
    {c:'同時に行う',t:'検査と箱詰めを同時に行う',kw:['検査','箱詰め','同時']},
    {c:'同時に行う',t:'カメラを用いて複数箇所を同時検査する',kw:['カメラ','複数','同時','画像']},
-   {c:'要るの？',t:'次工程の治具で検査できるようにして専用検査工程をなくす',kw:['次工程','治具','専用','なくす','廃止']},
-  ],
- },
- {
-  id:'q6', type:'対策案提示', setsubi:'切粉コンベア',
+   {c:'要るの？',t:'次工程の治具で検査して専用検査工程をなくす',kw:['次工程','治具','専用','なくす','廃止']},
+  ]}),
+ Q({id:'q6',type:'対策案提示',setsubi:'切粉コンベア',
   genshou:['加工中も停止中も常時回転','1日20時間稼働','実際に切粉が流れるのは加工中のみ'],
   toi:'この設備について、上位概念と改善案を3つ以上、電力削減の視点で答えてください。',
-  keyConcept:'待ちを無くす', graphs:['電力消費','状態履歴','可動率・出来高率'],
+  keyConcept:'待ちを無くす', graph:{kind:'power',note:'切粉コンベアは停止中も回転＝待機電力。加工中だけ回せばよい。'},
+  cases:['CT4028'],
   points:[
    {c:'待ちを無くす',key:true,t:'コンベアにタイマーを設定して停止／切粉排出時だけ回す',kw:['タイマー','切粉','排出','だけ','連動','停止']},
    {c:'待ちを無くす',t:'一定時間ごとに間欠運転する',kw:['間欠','一定時間','断続']},
    {c:'待ちを無くす',t:'休憩・終業後は停止／省エネモードで停止',kw:['休憩','終業','省エネ','電源','切','停止']},
    {c:'速度を速く',t:'出来高を上げて同じ生産量を短時間で→総運転時間を削減',kw:['出来高','生産','総運転','短時間','速く']},
    {c:'チョコ停を無くす',t:'頻発停止（チョコ停）を改善して可動率を上げ電力原単位を改善',kw:['チョコ停','可動率','頻発','原単位']},
-  ],
- },
- {
-  id:'q7', type:'対策案提示', setsubi:'ロボット付きマシニングセンタ',
+  ]}),
+ Q({id:'q7',type:'対策案提示',setsubi:'ロボット付きマシニングセンタ',
   genshou:['ロボットが加工終了を待っている時間が4秒ある','加工終了後にロボットが設備へ近づく','ロボット移動時間は3秒'],
   toi:'この現象に対して、上位概念付きで改善案を3つ以上挙げてください。',
-  keyConcept:'待ちを無くす', graphs:['CT時系列','状態履歴','CTヒストグラム'],
+  keyConcept:'待ちを無くす', graph:{kind:'bar',data:[['ロボット待ち',4],['ロボット移動',3],['正味加工',8]],hi:0,note:'待ち4秒・移動3秒が直列に発生。待ちを無くし、移動と加工を重ねる。'},
+  cases:['CT4004','CT4028'],
   points:[
    {c:'待ちを無くす',key:true,t:'加工完了を先読みして先行接近し、待ち4秒をなくす',kw:['先読み','先行','接近','待ち','なくす','待機']},
    {c:'同時に行う',t:'加工中にロボットを移動させ、移動と加工を同時並行にする',kw:['加工中','同時','並行','移動']},
    {c:'距離を短く',t:'ロボットの待機位置を設備に近づけて移動3秒を短縮する',kw:['待機位置','近づけ','距離','移動','短縮']},
    {c:'管理をする',t:'加工完了の確認タイマーを短縮する',kw:['タイマー','短縮','確認']},
-  ],
- },
+  ]}),
+ Q({id:'q8',type:'グラフの読み方',setsubi:'加工機（CTヒストグラム）',
+  genshou:['最頻CTが設定CTより明らかに長い（山が右にずれている）'],
+  toi:'CTヒストグラムで最頻CTが設定CTより長い場合、何が考えられますか？要因をできるだけ挙げてください。',
+  keyConcept:'管理をする', graph:{kind:'hist',variant:'shiftRight',note:'山が設定CTより右＝実際のCTが目標を超過。標準作業・経時劣化・習熟・工程追加を疑う。'},
+  cases:[],
+  points:[
+   {c:'管理をする',key:true,t:'標準作業を守っていない（標準の徹底・見える化）',kw:['標準','守','徹底','標準作業']},
+   {c:'管理をする',t:'経時劣化等でマシンタイムが延びている',kw:['経時','劣化','マシンタイム','延び']},
+   {c:'気遣いを無くす',t:'作業者の習熟度が低い／やりにくい作業がある',kw:['習熟','新人','やりにくい','熟練']},
+   {c:'要るの？',t:'管理者が把握していない工程追加がある',kw:['工程追加','追加','余計','把握']},
+   {c:'管理をする',t:'設定CTが適切か見直す（±5%以内が目安）',kw:['設定ct','見直','適切','5%']},
+  ]}),
+ Q({id:'q9',type:'上位概念と対策',setsubi:'段取り替えが多いライン',lens:'付帯作業を無くす',
+  genshou:['停止要因別詳細で「段取り替え」の合計停止時間が突出して長い'],
+  toi:'段取り替えの停止時間が長い場合の改善案を3つ以上挙げてください。（付帯作業を無くす／同時に行う の視点で）',
+  keyConcept:'付帯作業を無くす', graph:{kind:'bar',data:[['段取り替え',12],['チョコ停',5],['設備停止',4],['CT遅れ',3]],hi:0,note:'段取り替えが突出。外段取り化・要素短縮・ロット見直しで削減。'},
+  cases:[],
+  points:[
+   {c:'付帯作業を無くす',key:true,t:'内段取りを外段取り化する（生産中に別の人が次の段取り準備）',kw:['外段取り','内段取り','段取り','準備']},
+   {c:'同時に行う',t:'作業者以外が手伝う／並行して段取りを進める',kw:['手伝','並行','同時','複数']},
+   {c:'付帯作業を無くす',t:'各要素作業を短縮する（探す・調整・運ぶを減らす）',kw:['要素','短縮','探す','調整','運']},
+   {c:'要るの？',t:'ロットサイズを大きくして段取り替えの頻度を減らす',kw:['ロット','頻度','回数','まとめ']},
+  ]}),
 ];
+const QMAP = {}; QUESTIONS.forEach(q=>QMAP[q.id]=q);
 const NG = ['予防保全','定期交換','定期点検','オーバーホール'];
-const SESSION_N = 5;
 
 /* ===== 採点（オフライン・ルールベース） ===== */
 const norm = s => (s||'').toLowerCase().replace(/\s+/g,'').replace(/[、。・，．]/g,'');
 function grade(q, ans){
   const a = norm(ans);
-  const matched=[], missed=[];
-  let keyCovered=false;
-  q.points.forEach(p=>{
-    const hit = p.kw.some(k => a.includes(norm(k)));
-    if(hit){ matched.push(p); if(p.key) keyCovered=true; }
-    else missed.push(p);
-  });
-  const ngHits = NG.filter(n => a.includes(norm(n)));
-  const N = q.points.length;
-  const ratio = matched.length / N;
+  const matched=[], missed=[]; let keyCovered=false;
+  q.points.forEach(p=>{ const hit=p.kw.some(k=>a.includes(norm(k)));
+    if(hit){ matched.push(p); if(p.key) keyCovered=true; } else missed.push(p); });
+  const ngHits = NG.filter(n=>a.includes(norm(n)));
+  const ratio = matched.length / q.points.length;
   let s = 40 + ratio*50 + (keyCovered?10:0) - ngHits.length*15;
   if(matched.length===0) s = Math.min(s, ans.trim().length>10?22:5);
   s = Math.max(0, Math.min(100, Math.round(s)));
   return {score:s, matched, missed, keyCovered, ngHits};
 }
 
-/* ===== ランキング保存（localStorage） ===== */
-const LB_KEY = 'kaizenGod_ranking_v1';
-function loadLB(){ try{ return JSON.parse(localStorage.getItem(LB_KEY)||'[]'); }catch(e){ return []; } }
-function saveEntry(e){ const lb=loadLB(); lb.push(e); localStorage.setItem(LB_KEY, JSON.stringify(lb)); return lb; }
-
+/* ===== ランキング保存 ===== */
+const LB_KEY = 'kaizenGod_ranking_v2';
+const loadLB = () => { try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(e){return [];} };
+const saveEntry = e => { const lb=loadLB(); lb.push(e); localStorage.setItem(LB_KEY,JSON.stringify(lb)); };
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const yfmt = n => '¥'+(n||0).toLocaleString();
 
-/* ===== スタート画面 ===== */
-function Start({onStart, onRanking}){
-  const [dept,setDept] = useState('');
-  const [name,setName] = useState('');
+/* ============ SVG チャート（見るべきグラフの図解） ============ */
+function HistChart({variant}){
+  const W=560,H=200,padL=30,padB=22,padT=8,padR=8;
+  const min=36,max=48,step=0.2,setCT=37,warnCT=44;
+  const mean = variant==='shiftRight'?42:39.5, std=variant==='shiftRight'?1.4:1.0, peak=16;
+  const m2 = variant==='bimodal'?45:null, r2=0.95;
+  const bins=[]; for(let x=min;x<=max+1e-9;x+=step){
+    const i=Math.round((x-min)/step);
+    let g=Math.exp(-((x-mean)**2)/(2*std*std));
+    if(m2!=null) g=Math.max(g, r2*Math.exp(-((x-m2)**2)/(2*std*std)));
+    const jit=0.8+0.2*Math.abs((Math.sin(i*12.9898)*43758.5453)%1);
+    bins.push({x,c:Math.max(0,Math.round(peak*g*jit))});
+  }
+  const pw=W-padL-padR, ph=H-padT-padB, bw=pw/bins.length, mx=Math.max(...bins.map(b=>b.c),1);
+  const xF=v=>padL+((v-min)/(max-min))*pw;
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10">
-      <div className="text-center">
-        <div className="text-sm tracking-widest font-bold text-sky-600">旭鉄工 ｜ 観察の型で学ぶカイゼン採点ゲーム</div>
-        <h1 className="text-4xl sm:text-5xl font-black mt-2 text-slate-800">カイゼンの神様</h1>
-        <p className="mt-3 text-slate-600">設備と現象から<b>改善案</b>を考え、<b>上位概念</b>で分類して回答。100点満点で採点し、良かった点・模範例をフィードバックします。全{SESSION_N}問。</p>
-      </div>
-
-      <div className="card p-6 mt-7">
-        <label className="block text-sm font-bold text-slate-500 mb-1">部署を選択</label>
-        <select value={dept} onChange={e=>setDept(e.target.value)}
-          className="w-full border border-slate-300 rounded-xl p-3 bg-white">
-          <option value="">— 部署を選択 —</option>
-          {DEPTS.map(d=> <option key={d} value={d}>{d}</option>)}
-        </select>
-
-        <label className="block text-sm font-bold text-slate-500 mb-1 mt-4">氏名（任意）</label>
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder="例：山田 太郎"
-          className="w-full border border-slate-300 rounded-xl p-3"/>
-
-        <div className="mt-6 text-center">
-          <button disabled={!dept}
-            onClick={()=>onStart({dept, name: name.trim()||'名無し'})}
-            className="btn px-10 py-4 text-lg text-white"
-            style={{background: dept? 'linear-gradient(90deg,#f97316,#fb923c)':'#cbd5e1'}}>
-            ゲームスタート
-          </button>
-          {!dept && <div className="text-xs text-rose-500 mt-2">部署を選択してください</div>}
-        </div>
-      </div>
-
-      <div className="card p-5 mt-5">
-        <div className="font-bold text-slate-700 mb-2">称号（平均点で昇進）</div>
-        <div className="flex flex-wrap gap-1.5">
-          {RANKS.slice().reverse().map(r=>(
-            <span key={r.nm} className="text-xs font-bold px-2 py-1 rounded-full"
-              style={{background:r.c+'1a',color:r.c,border:`1px solid ${r.c}55`}}>{r.ic}{r.nm}</span>
-          ))}
-        </div>
-      </div>
-
-      <div className="text-center mt-5">
-        <button onClick={onRanking} className="btn px-6 py-2 border border-slate-300 text-slate-700 bg-white">🏅 ランキングを見る</button>
-      </div>
-    </div>
+   <svg viewBox={`0 0 ${W} ${H}`} className="chart">
+    {bins.map((b,i)=>{const y=padT+ph-(b.c/mx)*ph;return <rect key={i} x={padL+i*bw} y={y} width={Math.max(1,bw-1)} height={padT+ph-y} fill="#aac8ec"/>;})}
+    <line x1={xF(setCT)} y1={padT} x2={xF(setCT)} y2={padT+ph} stroke="#1f4e9e" strokeDasharray="4 3"/>
+    <text x={xF(setCT)+3} y={padT+11} style={{fontSize:10,fill:'#1f4e9e',fontWeight:700}}>設定CT {setCT}</text>
+    <line x1={xF(warnCT)} y1={padT} x2={xF(warnCT)} y2={padT+ph} stroke="#c92a2a" strokeDasharray="4 3"/>
+    <text x={xF(warnCT)-3} y={padT+11} textAnchor="end" style={{fontSize:10,fill:'#c92a2a',fontWeight:700}}>警告CT {warnCT}</text>
+    {[min,mean,max].map((v,i)=><text key={i} x={xF(v)} y={H-6} textAnchor="middle" className="ax">{v.toFixed(1)}</text>)}
+   </svg>
+  );
+}
+function PowerChart(){
+  const W=560,H=120,padL=8,padR=8,by=30,bh=38,s0=300,s1=1140; // 05:00-19:00 (分)
+  const segs=[['05:00','08:00','idle'],['08:00','12:00','run'],['12:00','13:00','lunch'],['13:00','17:00','run'],['17:00','19:00','off']];
+  const col={run:'#23b7e0',idle:'#e8590c',lunch:'#343a40',off:'#e8590c'};
+  const lab={run:'稼働',idle:'待機(電源ON)',lunch:'昼休み',off:'終業後'};
+  const tm=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
+  const pw=W-padL-padR, xF=t=>padL+((tm(t)-s0)/(s1-s0))*pw;
+  const ticks=[]; for(let h=6;h<=18;h+=2)ticks.push(`${String(h).padStart(2,'0')}:00`);
+  return (
+   <svg viewBox={`0 0 ${W} ${H}`} className="chart">
+    {segs.map((s,i)=><rect key={i} x={xF(s[0])} y={by} width={Math.max(1,xF(s[1])-xF(s[0]))} height={bh} fill={col[s[2]]}/>)}
+    <rect x={padL} y={by} width={pw} height={bh} fill="none" stroke="#dce3ec"/>
+    {ticks.map(t=><text key={t} x={xF(t)} y={by+bh+15} textAnchor="middle" className="ax">{t}</text>)}
+    {['run','idle','lunch'].map((k,i)=>(
+      <g key={k} transform={`translate(${padL+i*150},14)`}>
+        <rect width="12" height="12" y="-10" rx="2" fill={col[k]}/><text x="16" y="0" className="lg">{lab[k]}</text>
+      </g>))}
+   </svg>
+  );
+}
+function BarChart({data,hi}){
+  const W=560,H=40+data.length*30,padL=120,padR=40,padT=10;
+  const mx=Math.max(...data.map(d=>d[1]),1), pw=W-padL-padR;
+  return (
+   <svg viewBox={`0 0 ${W} ${H}`} className="chart">
+    {data.map((d,i)=>{const y=padT+i*30, w=(d[1]/mx)*pw, fill=i===hi?'#ef4444':'#94a3b8';
+      return (<g key={i}>
+        <text x={padL-8} y={y+15} textAnchor="end" style={{fontSize:12,fill:'#334155'}}>{d[0]}</text>
+        <rect x={padL} y={y+3} width={Math.max(2,w)} height={18} rx="3" fill={fill}/>
+        <text x={padL+w+5} y={y+16} style={{fontSize:11,fill:'#64748b',fontWeight:700}}>{d[1]}</text>
+      </g>);})}
+   </svg>
+  );
+}
+function GraphView({graph}){
+  return (
+   <div>
+     {graph.kind==='hist' && <HistChart variant={graph.variant}/>}
+     {graph.kind==='power' && <PowerChart/>}
+     {graph.kind==='bar' && <BarChart data={graph.data} hi={graph.hi}/>}
+     <div className="text-xs mt-1 wmark" style={{color:'#b45309'}}>👀 {graph.note}</div>
+   </div>
   );
 }
 
-/* ===== クイズ1問 ===== */
-function Quiz({q, idx, total, score, player, onDone}){
-  const [ans,setAns] = useState('');
-  const [fb,setFb] = useState(null);
-  const submit = () => { if(fb||ans.trim().length===0) return; setFb(grade(q, ans)); };
+/* ===== 上位概念リファレンス ===== */
+function LensRef(){
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between text-sm">
-        <div className="font-bold text-slate-500">第 {idx+1} / {total} 問 ｜ {q.type}</div>
-        <div className="font-black text-emerald-600">SCORE {score}</div>
-      </div>
-      <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-        <div className="h-full" style={{width:`${(idx/total)*100}%`,background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}/>
-      </div>
-
-      {/* お題（全文表示・切れない） */}
-      <div className="card p-5 mt-4 pop">
-        <div className="text-xs font-bold text-slate-400">設 備</div>
-        <div className="text-lg font-bold text-slate-800 wmark">{q.setsubi}</div>
-
-        {q.lens && (
-          <div className="mt-3">
-            <div className="text-xs font-bold text-slate-400">上位概念</div>
-            <Chip c={q.lens}/>
-          </div>
-        )}
-
-        {q.genshou && (
-          <div className="mt-3">
-            <div className="text-xs font-bold text-slate-400">現 象</div>
-            <ul className="list-disc pl-5 text-slate-700">
-              {q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}
-            </ul>
-          </div>
-        )}
-
-        <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}>
-          <span className="font-bold text-slate-800">{q.toi}</span>
-        </div>
-      </div>
-
-      {/* 回答 */}
-      <div className="mt-4">
-        <div className="text-xs text-slate-500 mb-1">あなたの回答（改善案を改行で複数。上位概念も書くと加点されやすい）</div>
-        <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6}
-          placeholder={'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止'}
-          className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
-      </div>
-
-      {!fb ? (
-        <div className="text-center mt-4">
-          <button disabled={ans.trim().length===0} onClick={submit}
-            className="btn px-10 py-3 text-white" style={{background:ans.trim()?'linear-gradient(90deg,#0ea5e9,#22c55e)':'#cbd5e1'}}>
-            採点する
-          </button>
-        </div>
-      ) : (
-        <Feedback q={q} fb={fb} ans={ans} idx={idx} total={total}
-          onNext={()=>onDone({qid:q.id, score:fb.score})}/>
-      )}
-    </div>
+   <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
+     {CONCEPTS.map((c,i)=>(
+       <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{background:c.c+'0d',border:`1px solid ${c.c}33`}}>
+         <div style={{minWidth:30,height:30,background:c.c}} className="rounded-md flex items-center justify-center text-white font-black text-xs">{c.kana}</div>
+         <div className="leading-tight">
+           <div className="font-bold text-sm" style={{color:c.c}}>{c.label}</div>
+           <div className="text-[11px] text-slate-500">{c.sub}</div>
+         </div>
+       </div>
+     ))}
+   </div>
   );
 }
 
-/* ===== 採点フィードバック ===== */
-function Feedback({q, fb, idx, total, onNext}){
-  const cls = fb.score>=80?'#16a34a':fb.score>=60?'#2563eb':'#ea580c';
+/* ===== KPI 経営ダッシュボード ===== */
+function Bar({label,val,unit,max,good}){
+  const pct=Math.max(0,Math.min(100,(val/max)*100));
+  const col = good ? (pct>66?'#22c55e':pct>40?'#f59e0b':'#ef4444') : (pct<33?'#22c55e':pct<55?'#f59e0b':'#ef4444');
   return (
-    <div className="card p-5 mt-4 pop">
-      <div className="text-center">
-        <span className="text-5xl font-black" style={{color:cls}}>{fb.score}</span>
-        <span className="text-slate-500 font-bold"> / 100点</span>
-      </div>
-
-      {fb.matched.length>0 && (
-        <div className="mt-4">
-          <div className="font-bold" style={{color:'#16a34a'}}>◎ 良かった点</div>
-          <ul className="mt-1 space-y-1">
-            {fb.matched.map((p,i)=><li key={i} className="text-sm wmark"><Chip c={p.c}/>{p.t}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {!fb.keyCovered && (
-        <div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}>
-          <div className="font-bold text-orange-700">⚠ 最重要の視点が抜けています</div>
-          <div className="text-sm text-slate-700 mt-1">
-            今回の最重要は <Chip c={q.keyConcept}/> です。
-            {q.keyConcept==='品番切替'
-              ? ' CTヒストグラムで山が2つある時は、まず「品番切替が適切か（iXacsの品番切替操作・設定CTの混在）」を疑います。'
-              : ' この観点の改善案を必ず入れましょう。'}
-          </div>
-        </div>
-      )}
-
-      {fb.missed.length>0 && (
-        <div className="mt-4">
-          <div className="font-bold text-slate-700">＋ 他に考えられる改善案（模範例）</div>
-          <ul className="mt-1 space-y-1">
-            {fb.missed.map((p,i)=><li key={i} className="text-sm text-slate-600 wmark"><Chip c={p.c}/>{p.t}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {fb.ngHits.length>0 && (
-        <div className="mt-4 p-3 rounded-xl" style={{background:'#fef2f2',border:'1px solid #fecaca'}}>
-          <div className="font-bold text-rose-700">✕ 予防保全はNG（−{fb.ngHits.length*15}点）</div>
-          <div className="text-sm text-slate-700 mt-1">当社の方針として予防保全は行いません（{fb.ngHits.join('、')}）。原因の修理・設定の適正化は「管理をする」としてOKです。</div>
-        </div>
-      )}
-
-      <div className="mt-4 text-xs text-slate-500">
-        見るべきiXacsグラフ：{q.graphs.map(g=> <span key={g} className="inline-block bg-sky-50 text-sky-700 border border-sky-200 rounded px-2 py-0.5 mr-1">{g}</span>)}
-      </div>
-
-      <div className="text-center mt-5">
-        <button onClick={onNext} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#f97316,#fb923c)'}}>
-          {idx+1>=total ? '総合結果へ' : '次の問題へ'}
-        </button>
-      </div>
-    </div>
+   <div className="mb-2">
+     <div className="flex justify-between text-sm"><span className="text-slate-600">{label}</span><span className="font-black" style={{color:col}}>{val.toFixed(1)}{unit}</span></div>
+     <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{width:pct+'%',background:col}}/></div>
+   </div>
   );
+}
+function Dashboard({results, idx}){
+  const k=calcKPI(results);
+  const yen=results.reduce((s,r)=>s+yenOf(r.score),0);
+  const avg=results.length?Math.round(results.reduce((s,r)=>s+r.score,0)/results.length):0;
+  const rk=rankOf(avg);
+  const nextCP=CHECKPOINTS.find(c=>c.at>idx)||CHECKPOINTS[CHECKPOINTS.length-1];
+  return (
+   <div className="card p-4">
+     <div className="font-bold text-slate-700 flex items-center gap-1 mb-2">📊 経営ダッシュボード</div>
+     <Bar label="利益率" val={k.rieki} unit="%" max={15} good/>
+     <Bar label="納期遵守率" val={k.nouki} unit="%" max={100} good/>
+     <Bar label="不良率" val={k.furyo} unit="%" max={15}/>
+     <Bar label="生産性" val={k.seisan} unit="%" max={100} good/>
+     <div className="border-t border-slate-100 mt-3 pt-3">
+       <div className="font-bold text-slate-700 flex items-center gap-1 mb-1">🏅 昇進トラッカー</div>
+       <div className="flex justify-between text-sm"><span className="text-slate-500">現在の称号</span><span className="font-black" style={{color:rk.c}}>{rk.ic}{rk.nm}</span></div>
+       <div className="flex justify-between text-sm"><span className="text-slate-500">次のチェックポイント</span><span className="font-bold text-sky-700">CP{CHECKPOINTS.indexOf(nextCP)+1}（あと{Math.max(0,nextCP.at-idx)}問）</span></div>
+       <div className="flex justify-between text-sm"><span className="text-slate-500">必達ライン(累計改善額)</span><span className="font-bold">{yfmt(yen)} / {yfmt(nextCP.target)}</span></div>
+       <div className="h-2 bg-slate-100 rounded-full overflow-hidden mt-1"><div className="h-full rounded-full" style={{width:Math.min(100,yen/nextCP.target*100)+'%',background:yen>=nextCP.target?'#22c55e':'#f59e0b'}}/></div>
+     </div>
+   </div>
+  );
+}
+
+/* ===== スタート ===== */
+function Start({onStart,onRanking}){
+  const [dept,setDept]=useState(''); const [name,setName]=useState('');
+  return (
+   <div className="max-w-2xl mx-auto px-4 py-8">
+     <div className="text-center">
+       <div className="text-sm tracking-widest font-bold text-sky-600">旭鉄工 ｜ 観察の型で学ぶカイゼン採点ゲーム</div>
+       <h1 className="text-4xl sm:text-5xl font-black mt-2 text-slate-800">カイゼンの神様</h1>
+       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。3問ごとの<b>必達ライン</b>を突破し、経営ダッシュボードを改善して<b>カイゼン神様</b>を目指せ！（全{SESSION_N}問）</p>
+     </div>
+     <div className="card p-6 mt-6">
+       <label className="block text-sm font-bold text-slate-500 mb-1">部署を選択</label>
+       <select value={dept} onChange={e=>setDept(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 bg-white">
+         <option value="">— 部署を選択 —</option>
+         {DEPTS.map(d=><option key={d} value={d}>{d}</option>)}
+       </select>
+       <label className="block text-sm font-bold text-slate-500 mb-1 mt-4">氏名（任意）</label>
+       <input value={name} onChange={e=>setName(e.target.value)} placeholder="例：山田 太郎" className="w-full border border-slate-300 rounded-xl p-3"/>
+       <div className="mt-6 text-center">
+         <button disabled={!dept} onClick={()=>onStart({dept,name:name.trim()||'名無し'})} className="btn px-10 py-4 text-lg text-white" style={{background:dept?'linear-gradient(90deg,#f97316,#fb923c)':'#cbd5e1'}}>ゲームスタート</button>
+         {!dept && <div className="text-xs text-rose-500 mt-2">部署を選択してください</div>}
+       </div>
+     </div>
+     <div className="card p-5 mt-5">
+       <div className="font-bold text-slate-700 mb-2">📖 上位概念（観察の型）— 迷ったらこれで分類</div>
+       <LensRef/>
+     </div>
+     <div className="text-center mt-5"><button onClick={onRanking} className="btn px-6 py-2 border border-slate-300 bg-white text-slate-700">🏅 ランキングを見る</button></div>
+   </div>
+  );
+}
+
+/* ===== クイズ ===== */
+function Quiz({q,idx,total,results,onDone}){
+  const [ans,setAns]=useState(''); const [fb,setFb]=useState(null); const [showRef,setShowRef]=useState(false);
+  const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(grade(q,ans)); };
+  return (
+   <div className="max-w-5xl mx-auto px-4 py-6 grid md:grid-cols-3 gap-4">
+     <div className="md:col-span-2">
+       <div className="flex items-center justify-between text-sm">
+         <div className="font-bold text-slate-500">第 {idx+1} / {total} 問 ｜ {q.type}</div>
+         <button onClick={()=>setShowRef(!showRef)} className="text-sky-600 font-bold">📖 上位概念{showRef?'を隠す':'ヒント'}</button>
+       </div>
+       <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden"><div className="h-full" style={{width:`${(idx/total)*100}%`,background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}/></div>
+
+       {showRef && <div className="card p-3 mt-3"><LensRef/></div>}
+
+       <div className="card p-5 mt-3 pop">
+         <div className="text-xs font-bold text-slate-400">設 備</div>
+         <div className="text-lg font-bold text-slate-800 wmark">{q.setsubi}</div>
+         {q.lens && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
+         {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
+         <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{q.toi}</span></div>
+       </div>
+
+       <div className="mt-3">
+         <div className="text-xs text-slate-500 mb-1">あなたの回答（改善案を改行で複数。上位概念も書くと加点されやすい）</div>
+         <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6} placeholder={'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止'} className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
+       </div>
+
+       {!fb ? (
+         <div className="text-center mt-4"><button disabled={ans.trim().length===0} onClick={submit} className="btn px-10 py-3 text-white" style={{background:ans.trim()?'linear-gradient(90deg,#0ea5e9,#22c55e)':'#cbd5e1'}}>採点する</button></div>
+       ) : (
+         <Feedback q={q} fb={fb} idx={idx} total={total} onNext={()=>onDone({qid:q.id,type:q.type,keyConcept:q.keyConcept,keyCovered:fb.keyCovered,score:fb.score})}/>
+       )}
+     </div>
+     <div className="md:col-span-1"><Dashboard results={results} idx={idx}/></div>
+   </div>
+  );
+}
+
+/* ===== フィードバック ===== */
+function Feedback({q,fb,idx,total,onNext}){
+  const cls=fb.score>=80?'#16a34a':fb.score>=60?'#2563eb':'#ea580c';
+  const cases=(q.cases||[]).map(id=>CASES[id]).filter(Boolean);
+  return (
+   <div className="card p-5 mt-4 pop">
+     <div className="text-center"><span className="text-5xl font-black" style={{color:cls}}>{fb.score}</span><span className="text-slate-500 font-bold"> / 100点</span><span className="text-sm text-slate-400 ml-2">(改善額 {yfmt(yenOf(fb.score))})</span></div>
+
+     {fb.matched.length>0 && (<div className="mt-4"><div className="font-bold" style={{color:'#16a34a'}}>◎ 良かった点</div><ul className="mt-1 space-y-1">{fb.matched.map((p,i)=><li key={i} className="text-sm wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
+
+     {!fb.keyCovered && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ 最重要の視点が抜けています</div><div className="text-sm text-slate-700 mt-1">今回の最重要は <Chip c={q.keyConcept}/> です。{q.keyConcept==='品番切替'?' CTヒストグラムで山が2つある時は、まず「品番切替が適切か」を疑います。':' この観点の改善案を必ず入れましょう。'}</div></div>)}
+
+     {fb.missed.length>0 && (<div className="mt-4"><div className="font-bold text-slate-700">＋ 他に考えられる改善案（模範例）</div><ul className="mt-1 space-y-1">{fb.missed.map((p,i)=><li key={i} className="text-sm text-slate-600 wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
+
+     {fb.ngHits.length>0 && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fef2f2',border:'1px solid #fecaca'}}><div className="font-bold text-rose-700">✕ 予防保全はNG（−{fb.ngHits.length*15}点）</div><div className="text-sm text-slate-700 mt-1">当社の方針として予防保全は行いません（{fb.ngHits.join('、')}）。原因の修理・設定の適正化は「管理をする」としてOKです。</div></div>)}
+
+     <div className="mt-4 p-3 rounded-xl" style={{background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+       <div className="font-bold text-slate-700 mb-1">📈 見るべきiXacsグラフ（ここを見る）</div>
+       <GraphView graph={q.graph}/>
+     </div>
+
+     {cases.length>0 && (
+       <div className="mt-4">
+         <div className="font-bold text-slate-700 mb-2">💡 参考になる実際の改善事例</div>
+         <div className="grid sm:grid-cols-2 gap-3">
+           {cases.map((c,i)=>(
+             <div key={i} className="rounded-xl border border-slate-200 p-3">
+               <div className="flex items-center justify-between"><Chip c={c.concept}/><span className="text-xs font-bold text-emerald-600">{yfmt(c.yen)}/年</span></div>
+               <div className="font-bold text-sm mt-1 wmark">{c.title}</div>
+               <div className="text-xs text-slate-400">{c.setsubi}</div>
+               <div className="flex gap-2 mt-2">{c.imgs.map((im,j)=>(<figure key={j} className="flex-1 m-0"><img src={im.src} alt={im.cap} className="w-full rounded border border-slate-200"/><figcaption className="text-[10px] text-slate-500 mt-0.5 wmark">{im.cap}</figcaption></figure>))}</div>
+               <div className="text-xs text-slate-600 mt-2 wmark">{c.summary}</div>
+             </div>
+           ))}
+         </div>
+       </div>
+     )}
+
+     <div className="text-center mt-5"><button onClick={onNext} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#f97316,#fb923c)'}}>{idx+1>=total?'最終結果へ':((idx+1)%3===0?'チェックポイント判定へ':'次の問題へ')}</button></div>
+   </div>
+  );
+}
+
+/* ===== チェックポイント判定 ===== */
+function Checkpoint({cpIndex,passed,yen,target,onContinue,onGameover}){
+  return (
+   <div className="max-w-xl mx-auto px-4 py-12 text-center">
+     <div className="text-6xl">{passed?'🎉':'💥'}</div>
+     <h1 className="text-3xl font-black mt-3" style={{color:passed?'#16a34a':'#dc2626'}}>チェックポイント{cpIndex+1} {passed?'突破！':'未達…'}</h1>
+     <div className="card p-6 mt-6 inline-block">
+       <div className="text-slate-500 text-sm">累計改善額</div>
+       <div className="text-4xl font-black" style={{color:passed?'#16a34a':'#dc2626'}}>{yfmt(yen)}</div>
+       <div className="text-slate-500 text-sm mt-1">必達ライン {yfmt(target)}</div>
+     </div>
+     <div className="mt-8">
+       {passed
+        ? <button onClick={onContinue} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}>次の3問へ進む</button>
+        : <button onClick={onGameover} className="btn px-10 py-3 text-white" style={{background:'#dc2626'}}>結果を見る（ゲームオーバー）</button>}
+     </div>
+   </div>
+  );
+}
+
+/* ===== 弱点評価 ===== */
+function weakness(results){
+  const byType={}; results.forEach(r=>{(byType[r.type]=byType[r.type]||[]).push(r.score);});
+  let worstType=null,worstAvg=101;
+  Object.keys(byType).forEach(t=>{const a=byType[t].reduce((s,v)=>s+v,0)/byType[t].length; if(a<worstAvg){worstAvg=a;worstType=t;}});
+  const keyMiss={}; results.forEach(r=>{ if(!r.keyCovered){keyMiss[r.keyConcept]=(keyMiss[r.keyConcept]||0)+1;} });
+  const missConcepts=Object.keys(keyMiss).sort((a,b)=>keyMiss[b]-keyMiss[a]);
+  return {worstType,worstAvg:Math.round(worstAvg),missConcepts,keyMiss};
 }
 
 /* ===== 総評 ===== */
-function Summary({player, results, onRanking, onRetry}){
-  const avg = Math.round(results.reduce((s,r)=>s+r.score,0)/results.length);
-  const r = rankOf(avg);
+function Summary({player,results,clearedAll,onRanking,onRetry}){
+  const avg=Math.round(results.reduce((s,r)=>s+r.score,0)/results.length);
+  const rk=rankOf(avg); const w=weakness(results);
+  const yen=results.reduce((s,r)=>s+yenOf(r.score),0);
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10 text-center">
-      <div className="text-6xl">{r.ic}</div>
-      <div className="text-sm text-slate-500 mt-2">{player.dept} ／ {player.name} さんの称号</div>
-      <div className="text-4xl font-black mt-1" style={{color:r.c}}>{r.nm}</div>
+   <div className="max-w-2xl mx-auto px-4 py-10 text-center">
+     {clearedAll && <div className="text-emerald-600 font-black mb-2">👑 全チェックポイント突破！工場改革コンプリート</div>}
+     <div className="text-6xl">{rk.ic}</div>
+     <div className="text-sm text-slate-500 mt-2">{player.dept} ／ {player.name} さんの称号</div>
+     <div className="text-4xl font-black mt-1" style={{color:rk.c}}>{rk.nm}</div>
 
-      <div className="card p-6 mt-7 inline-block">
-        <div className="text-slate-500 text-sm">総合（平均点）</div>
-        <div className="text-5xl font-black" style={{color:'#16a34a'}}>{avg}</div>
-        <div className="text-slate-500 text-sm">/ 100点</div>
-      </div>
+     <div className="flex gap-3 justify-center mt-6 flex-wrap">
+       <div className="card p-5"><div className="text-slate-500 text-sm">総合（平均点）</div><div className="text-4xl font-black text-emerald-600">{avg}</div></div>
+       <div className="card p-5"><div className="text-slate-500 text-sm">累計改善額</div><div className="text-4xl font-black text-sky-600">{yfmt(yen)}</div></div>
+     </div>
 
-      <div className="card p-5 mt-5 text-left">
-        <div className="font-bold text-slate-700 mb-2">各問の点数</div>
-        {results.map((x,i)=>(
-          <div key={i} className="flex justify-between border-b border-slate-100 py-1 text-sm">
-            <span>第{i+1}問</span><span className="font-bold">{x.score}点</span>
-          </div>
-        ))}
-      </div>
+     <div className="card p-5 mt-5 text-left">
+       <div className="font-bold text-slate-700 mb-2">🔎 ここが弱いです（弱点分析）</div>
+       {w.missConcepts.length>0
+        ? <div className="text-sm text-slate-700">最重要視点の取りこぼし： {w.missConcepts.map(c=><Chip key={c} c={c}/>)}<div className="text-xs text-slate-500 mt-1">この視点が問われた時に改善案を出せていません。{w.missConcepts.includes('待ちを無くす')&&'電力問題は「動いていないのに電気を使っていないか？」で考えると見つかります。'}{w.missConcepts.includes('品番切替')&&'CTヒストグラムで山が2つの時は、まず品番切替を疑いましょう。'}</div></div>
+        : <div className="text-sm text-emerald-700">最重要視点はすべて押さえられています。素晴らしい！</div>}
+       <div className="text-sm text-slate-700 mt-3">最も苦手な出題タイプ： <b>{w.worstType}</b>（平均 {w.worstAvg}点）</div>
+       <div className="text-xs text-slate-500 mt-2">ヒント：電力→「待ちを無くす」／CT→「待ちを無くす・同時に行う・距離を短く」／品質→「同時に行う・気遣いを無くす」で考える癖をつけましょう。</div>
+     </div>
 
-      <div className="flex gap-3 justify-center mt-7">
-        <button onClick={onRanking} className="btn px-6 py-3 text-white" style={{background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}>🏅 ランキングを見る</button>
-        <button onClick={onRetry} className="btn px-6 py-3 border border-slate-300 bg-white text-slate-700">もう一度</button>
-      </div>
-    </div>
+     <div className="card p-5 mt-5 text-left">
+       <div className="font-bold text-slate-700 mb-2">各問の点数</div>
+       {results.map((x,i)=>(<div key={i} className="flex justify-between border-b border-slate-100 py-1 text-sm"><span>第{i+1}問 <span className="text-slate-400">{x.type}</span></span><span className="font-bold">{x.score}点</span></div>))}
+     </div>
+
+     <div className="flex gap-3 justify-center mt-7"><button onClick={onRanking} className="btn px-6 py-3 text-white" style={{background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}>🏅 ランキングを見る</button><button onClick={onRetry} className="btn px-6 py-3 border border-slate-300 bg-white text-slate-700">もう一度</button></div>
+   </div>
   );
 }
 
-/* ===== ランキング（個人・部署別） ===== */
-function Ranking({me, onBack}){
-  const lb = loadLB();
-  const indiv = lb.slice().sort((a,b)=> b.avg-a.avg || b.date-a.date).slice(0,20);
-  const byDept = {};
-  lb.forEach(e=>{ (byDept[e.dept]=byDept[e.dept]||[]).push(e.avg); });
-  const dept = Object.keys(byDept).map(d=>{
-    const arr=byDept[d]; const avg=Math.round(arr.reduce((s,v)=>s+v,0)/arr.length);
-    return {dept:d, avg, n:arr.length, best:Math.max(...arr)};
-  }).sort((a,b)=> b.avg-a.avg);
-
+/* ===== ランキング（個人＋部署別合計を同時表示） ===== */
+function Ranking({me,onBack}){
+  const lb=loadLB();
+  const indiv=lb.slice().sort((a,b)=>b.avg-a.avg||b.date-a.date).slice(0,20);
+  const agg={}; lb.forEach(e=>{const g=agg[e.dept]=agg[e.dept]||{sum:0,n:0,best:0}; g.sum+=e.avg; g.n++; g.best=Math.max(g.best,e.avg);});
+  const deptSum=Object.keys(agg).map(d=>({dept:d,sum:agg[d].sum,n:agg[d].n,avg:Math.round(agg[d].sum/agg[d].n)})).sort((a,b)=>b.sum-a.sum);
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black text-slate-800">🏅 ランキング</h1>
-        <button onClick={onBack} className="btn px-4 py-2 border border-slate-300 bg-white text-slate-600">戻る</button>
-      </div>
-
-      <div className="card p-5 mt-4">
-        <div className="font-bold text-slate-700 mb-2">部署別ランキング（平均点）</div>
-        {dept.length===0 && <div className="text-slate-400 text-sm">まだ記録がありません。</div>}
-        {dept.map((d,i)=>(
-          <div key={d.dept} className={`flex items-center justify-between py-2 border-b border-slate-100 ${me&&me.dept===d.dept?'bg-amber-50 rounded':''}`}>
-            <span className="font-bold w-8 text-center">{i+1}</span>
-            <span className="flex-1">{d.dept} <span className="text-xs text-slate-400">({d.n}件)</span></span>
-            <span className="font-black text-emerald-600">{d.avg}点</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="card p-5 mt-5">
-        <div className="font-bold text-slate-700 mb-2">個人ランキング（上位20）</div>
-        {indiv.length===0 && <div className="text-slate-400 text-sm">まだ記録がありません。</div>}
-        {indiv.map((e,i)=>{
-          const r=rankOf(e.avg);
-          const isMe = me && e._id===me._id;
-          return (
-            <div key={i} className={`flex items-center justify-between py-2 border-b border-slate-100 ${isMe?'bg-amber-50 rounded':''}`}>
-              <span className="font-bold w-8 text-center">{i+1}</span>
-              <span className="flex-1">{e.name} <span className="text-xs text-slate-400">{e.dept}</span></span>
-              <span className="text-xs mr-2" style={{color:r.c}}>{r.ic}{r.nm}</span>
-              <span className="font-black text-emerald-600">{e.avg}点</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+   <div className="max-w-4xl mx-auto px-4 py-8">
+     <div className="flex items-center justify-between"><h1 className="text-2xl font-black text-slate-800">🏅 ランキング</h1><button onClick={onBack} className="btn px-4 py-2 border border-slate-300 bg-white text-slate-600">戻る</button></div>
+     <div className="grid md:grid-cols-2 gap-4 mt-4">
+       <div className="card p-5">
+         <div className="font-bold text-slate-700 mb-2">🏢 部署別ランキング（合計改善ポイント）</div>
+         {deptSum.length===0 && <div className="text-slate-400 text-sm">まだ記録がありません。</div>}
+         {deptSum.map((d,i)=>(<div key={d.dept} className={`flex items-center justify-between py-2 border-b border-slate-100 ${me&&me.dept===d.dept?'bg-amber-50 rounded px-1':''}`}><span className="font-bold w-7 text-center">{i+1}</span><span className="flex-1 text-sm">{d.dept} <span className="text-xs text-slate-400">({d.n}人/平均{d.avg})</span></span><span className="font-black text-sky-600">{d.sum}</span></div>))}
+       </div>
+       <div className="card p-5">
+         <div className="font-bold text-slate-700 mb-2">👤 個人ランキング（上位20）</div>
+         {indiv.length===0 && <div className="text-slate-400 text-sm">まだ記録がありません。</div>}
+         {indiv.map((e,i)=>{const r=rankOf(e.avg); const isMe=me&&e._id===me._id;
+           return (<div key={i} className={`flex items-center justify-between py-2 border-b border-slate-100 ${isMe?'bg-amber-50 rounded px-1':''}`}><span className="font-bold w-7 text-center">{i+1}</span><span className="flex-1 text-sm">{e.name} <span className="text-xs text-slate-400">{e.dept}</span></span><span className="text-xs mr-2" style={{color:r.c}}>{r.ic}{r.nm}</span><span className="font-black text-emerald-600">{e.avg}</span></div>);})}
+       </div>
+     </div>
+   </div>
   );
 }
 
 /* ===== 本体 ===== */
 function App(){
-  const [phase,setPhase] = useState('start'); // start|quiz|summary|ranking
-  const [back,setBack] = useState('start');
-  const [player,setPlayer] = useState(null);
-  const [session,setSession] = useState([]);
-  const [idx,setIdx] = useState(0);
-  const [results,setResults] = useState([]);
-  const [me,setMe] = useState(null);
+  const [phase,setPhase]=useState('start'); // start|quiz|checkpoint|gameover|summary|ranking
+  const [back,setBack]=useState('start');
+  const [player,setPlayer]=useState(null);
+  const [session,setSession]=useState([]);
+  const [idx,setIdx]=useState(0);
+  const [results,setResults]=useState([]);
+  const [cp,setCp]=useState(null);
+  const [me,setMe]=useState(null);
 
-  const start = (p) => {
-    setPlayer(p); setSession(shuffle(QUESTIONS).slice(0,SESSION_N));
-    setIdx(0); setResults([]); setMe(null); setPhase('quiz');
-  };
-  const onDone = (res) => {
-    const all = [...results, res];
-    setResults(all);
-    if(idx+1 >= session.length){
-      const avg = Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
-      const entry = {_id:'e'+Date.now()+Math.floor(Math.random()*1000), name:player.name, dept:player.dept, avg, date:Date.now(), n:all.length};
-      saveEntry(entry); setMe(entry); setPhase('summary');
+  const start=(p)=>{ setPlayer(p); setSession(shuffle(QUESTIONS).slice(0,SESSION_N)); setIdx(0); setResults([]); setMe(null); setPhase('quiz'); };
+  const finish=(all,cleared)=>{ const avg=Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
+    const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now(),cleared};
+    saveEntry(e); setMe(e); };
+  const onDone=(res)=>{
+    const all=[...results,res]; setResults(all); const n=all.length;
+    const cpDef=CHECKPOINTS.find(c=>c.at===n);
+    if(cpDef){
+      const yen=all.reduce((s,r)=>s+yenOf(r.score),0); const passed=yen>=cpDef.target;
+      setCp({cpIndex:CHECKPOINTS.indexOf(cpDef),passed,yen,target:cpDef.target,isLast:n>=SESSION_N});
+      setPhase('checkpoint');
     } else { setIdx(idx+1); }
+  };
+  const afterCP=()=>{
+    if(!cp.passed){ finish(results,false); setPhase('gameover'); return; }
+    if(cp.isLast){ finish(results,true); setPhase('summary'); return; }
+    setIdx(idx+1); setPhase('quiz');
   };
 
   if(phase==='start') return <Start onStart={start} onRanking={()=>{setBack('start');setPhase('ranking');}}/>;
   if(phase==='ranking') return <Ranking me={me} onBack={()=>setPhase(back)}/>;
-  if(phase==='summary') return <Summary player={player} results={results}
-     onRanking={()=>{setBack('summary');setPhase('ranking');}} onRetry={()=>setPhase('start')}/>;
+  if(phase==='checkpoint') return <Checkpoint {...cp} onContinue={afterCP} onGameover={afterCP}/>;
+  if(phase==='gameover') return <Summary player={player} results={results} clearedAll={false} onRanking={()=>{setBack('gameover');setPhase('ranking');}} onRetry={()=>setPhase('start')}/>;
+  if(phase==='summary') return <Summary player={player} results={results} clearedAll={true} onRanking={()=>{setBack('summary');setPhase('ranking');}} onRetry={()=>setPhase('start')}/>;
 
-  // quiz
-  const totalScore = results.reduce((s,r)=>s+r.score,0);
-  return <Quiz key={idx} q={session[idx]} idx={idx} total={session.length} score={totalScore} player={player} onDone={onDone}/>;
+  return <Quiz key={idx} q={session[idx]} idx={idx} total={session.length} results={results} onDone={onDone}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
