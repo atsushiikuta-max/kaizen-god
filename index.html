@@ -9,6 +9,7 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="cases.js"></script>
 <style>
   body{background:#f7f9fc;color:#1f2937;font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif}
   .card{background:#fff;border:1px solid #e5e9f0;border-radius:16px;box-shadow:0 4px 16px rgba(20,40,70,.06)}
@@ -293,7 +294,79 @@ const QUESTIONS = [
    {c:'管理をする',t:'現場をよく観察して原因を特定する',kw:['観察','現場','原因','特定']},
   ]}),
 ];
-const QMAP = {}; QUESTIONS.forEach(q=>QMAP[q.id]=q);
+/* ===== 実改善事例239件から問題を自動生成（合計250問超のプール） ===== */
+const LENS_LABEL = {iru:'要るの？',machi:'待ちを無くす',douji:'同時に行う',kyori:'距離を短く',futai:'付帯作業を無くす',kizukai:'気遣いを無くす',sokudo:'速度を速く',kanri:'管理をする',choko:'チョコ停を無くす',cn:'カーボンニュートラル'};
+const CONCEPT_BANK = {
+ '要るの？':[
+   {c:'要るの？',key:true,t:'その工程・作業・設備そのものを廃止できないか考える',kw:['廃止','なくす','無く','やめ','不要','要らな']},
+   {c:'要るの？',t:'過剰な品質・検査・回数を減らす',kw:['過剰','回数','減ら','検査','品質']},
+   {c:'要るの？',t:'高効率な設備・方式に置き換える（からくり・重力・バネ）',kw:['からくり','高効率','置き換え','重力','バネ']},
+   {c:'要るの？',t:'前工程保証で自工程の作業をやめる',kw:['前工程','保証','省']},
+ ],
+ '待ちを無くす':[
+   {c:'待ちを無くす',key:true,t:'休憩・終業後・停止中は電源OFF/停止（待機電力削減）',kw:['電源','off','切','休憩','終業','停止','待機','非常停止']},
+   {c:'待ちを無くす',t:'タイマー・センサー連動で必要な時だけ動かす（間欠運転）',kw:['タイマー','センサー','連動','必要','間欠','だけ']},
+   {c:'待ちを無くす',t:'先行動作・段取り準備で待ち時間をなくす',kw:['先行','先読み','段取り','待ち','準備']},
+   {c:'待ちを無くす',t:'順序変更・移管で停止/手待ちを減らす',kw:['順序','移管','手待ち','タイミング']},
+ ],
+ '同時に行う':[
+   {c:'同時に行う',key:true,t:'検査と加工/記録/箱詰めを同時に行う',kw:['同時','検査','記録','箱詰め','加工']},
+   {c:'同時に行う',t:'複数箇所・複数項目を同時に処理する',kw:['複数','同時測定','2ヶ','2箇所','まとめて']},
+   {c:'同時に行う',t:'ワークセットと同時に起動・検査する',kw:['セット','同時','起動']},
+   {c:'同時に行う',t:'移動しながら確認、加工しながら準備する',kw:['しながら','並行','移動','準備']},
+ ],
+ '距離を短く':[
+   {c:'距離を短く',key:true,t:'起動スイッチ・治具・部品を近くに配置する',kw:['位置','近','配置','スイッチ','治具']},
+   {c:'距離を短く',t:'動作ストロークを短くする',kw:['ストローク','短く','動作']},
+   {c:'距離を短く',t:'設備間を詰めて歩行距離を短縮する',kw:['設備間','歩行','詰め','レイアウト']},
+   {c:'距離を短く',t:'移動経路を最短化する（斜め移動など）',kw:['経路','斜め','移動距離','最短']},
+ ],
+ '付帯作業を無くす':[
+   {c:'付帯作業を無くす',key:true,t:'記録・カウントを自動化する',kw:['記録','自動','カウント']},
+   {c:'付帯作業を無くす',t:'清掃・切粉処理を減らす構造にする',kw:['清掃','切粉','カバー','散ら']},
+   {c:'付帯作業を無くす',t:'探し物を無くす（定位置化・5S）',kw:['探','定位置','5s','置き場']},
+   {c:'付帯作業を無くす',t:'段取り替えを外段取り化・短縮する',kw:['段取り','外段取り','短縮','準備']},
+ ],
+ '気遣いを無くす':[
+   {c:'気遣いを無くす',key:true,t:'治具・位置決めで「狙わない・調整しない」',kw:['治具','位置決め','狙わ','調整']},
+   {c:'気遣いを無くす',t:'ポカヨケ・センサーで自動判定にする',kw:['ポカヨケ','センサー','自動','判定']},
+   {c:'気遣いを無くす',t:'保持しないで済む固定具にする',kw:['保持','固定','クランプ']},
+   {c:'気遣いを無くす',t:'色分け・表示でわかりやすくし見間違いを防ぐ',kw:['色分け','表示','わかり','見間違']},
+ ],
+ '速度を速く':[
+   {c:'速度を速く',key:true,t:'動作・搬送・主軸の速度を上げる',kw:['速度','速く','回転','上げ','搬送']},
+   {c:'速度を速く',t:'マシンタイム・加工条件を最適化する',kw:['マシンタイム','加工条件','最適','条件']},
+   {c:'速度を速く',t:'判断・伝達を速くする（見える化）',kw:['判断','伝達','見える化']},
+ ],
+ '管理をする':[
+   {c:'管理をする',key:true,t:'標準作業を決めて守る・見える化する',kw:['標準','見える化','守']},
+   {c:'管理をする',t:'設定値（圧力・流量・温度・設定CT）を適正化する',kw:['設定','圧力','流量','温度','適正','設定ct']},
+   {c:'管理をする',t:'異常・停止要因を登録して管理する',kw:['異常','停止要因','登録','要因']},
+   {c:'管理をする',t:'原因を修理する（漏れ等の事後修理）',kw:['修理','漏れ','原因']},
+ ],
+ 'チョコ停を無くす':[
+   {c:'チョコ停を無くす',key:true,t:'センサー誤作動・詰まり・位置ズレを潰す',kw:['センサー','誤作動','詰まり','ズレ']},
+   {c:'チョコ停を無くす',t:'やりにくい作業をやりやすくする',kw:['やりにくい','やりやす']},
+   {c:'チョコ停を無くす',t:'小トラブルを根本対策する',kw:['根本','対症','小さな','トラブル']},
+   {c:'チョコ停を無くす',t:'現場観察で原因を特定する',kw:['観察','現場','原因','特定']},
+ ],
+ 'カーボンニュートラル':[
+   {c:'カーボンニュートラル',key:true,t:'待機・停止電力を削減（非稼働時に電源OFF）',kw:['待機','停止','電源','off','切','休憩']},
+   {c:'カーボンニュートラル',t:'正味電力の効率化（流量・圧力・回転数を下げる）',kw:['流量','圧力','回転数','下げ','正味']},
+   {c:'カーボンニュートラル',t:'高効率機器・インバーター化・LED化',kw:['高効率','インバーター','led']},
+   {c:'カーボンニュートラル',t:'生産性向上で総運転時間・電力原単位を削減',kw:['出来高','生産性','原単位','総運転']},
+ ],
+};
+const GEN_QUESTIONS = ((window.MUDA_CASES||[]).map((c,i)=>{
+  const concept = LENS_LABEL[c.l]; const bank = concept && CONCEPT_BANK[concept];
+  if(!bank) return null;
+  return {id:'g'+i, type:'上位概念と対策', setsubi:c.s||'設備', kotei:c.k, nerai:c.n, lens:concept, keyConcept:concept,
+    toi:`「${concept}」の視点で、この設備（${c.k||'—'}／狙い：${c.n||'CT短縮'}）に有効な改善案を3つ以上、具体的に挙げてください。`,
+    points:bank, reveal:{id:c.id,title:c.t,summary:c.d,yen:c.y}, cases:[]};
+}).filter(Boolean));
+
+const POOL = QUESTIONS.concat(GEN_QUESTIONS);
+const QMAP = {}; POOL.forEach(q=>QMAP[q.id]=q);
 const NG = ['予防保全','定期交換','定期点検','オーバーホール'];
 
 /* ===== 採点（オフライン・ルールベース） ===== */
@@ -317,6 +390,13 @@ const loadLB = () => { try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]')
 const saveEntry = e => { const lb=loadLB(); lb.push(e); localStorage.setItem(LB_KEY,JSON.stringify(lb)); };
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 const yfmt = n => '¥'+(n||0).toLocaleString();
+/* 上位概念が偏らないように9問を抽選（同一keyConceptは最大2問） */
+function pickSession(){
+  const sh=shuffle(POOL), out=[], cap={};
+  for(const q of sh){ if(out.length>=SESSION_N) break; const k=q.keyConcept; if((cap[k]||0)>=2) continue; cap[k]=(cap[k]||0)+1; out.push(q); }
+  for(const q of sh){ if(out.length>=SESSION_N) break; if(out.indexOf(q)<0) out.push(q); }
+  return out;
+}
 
 /* ============ SVG チャート（見るべきグラフの図解） ============ */
 function HistChart({variant}){
@@ -454,7 +534,7 @@ function Start({onStart,onRanking}){
      <div className="text-center">
        <div className="text-sm tracking-widest font-bold text-sky-600">旭鉄工 ｜ 観察の型で学ぶカイゼン採点ゲーム</div>
        <h1 className="text-4xl sm:text-5xl font-black mt-2 text-slate-800">カイゼンの神様</h1>
-       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。3問ごとの<b>必達ライン</b>を突破し、経営ダッシュボードを改善して<b>カイゼン神様</b>を目指せ！（全{SESSION_N}問）</p>
+       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。3問ごとの<b>必達ライン</b>を突破し、経営ダッシュボードを改善して<b>カイゼン神様</b>を目指せ！<br/><span className="text-xs text-slate-400">全{POOL.length}問からランダムに{SESSION_N}問を出題</span></p>
      </div>
      <div className="card p-6 mt-6">
        <label className="block text-sm font-bold text-slate-500 mb-1">部署を選択</label>
@@ -501,6 +581,7 @@ function Quiz({q,idx,total,results,onDone}){
        <div className="card p-5 mt-3 pop">
          <div className="text-xs font-bold text-slate-400">設 備</div>
          <div className="text-lg font-bold text-slate-800 wmark">{q.setsubi}</div>
+         {(q.kotei||q.nerai) && <div className="text-xs text-slate-500 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
          {q.lens && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
          {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
          <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{q.toi}</span></div>
@@ -539,10 +620,23 @@ function Feedback({q,fb,idx,total,onNext}){
 
      {fb.ngHits.length>0 && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fef2f2',border:'1px solid #fecaca'}}><div className="font-bold text-rose-700">✕ 予防保全はNG（−{fb.ngHits.length*15}点）</div><div className="text-sm text-slate-700 mt-1">当社の方針として予防保全は行いません（{fb.ngHits.join('、')}）。原因の修理・設定の適正化は「管理をする」としてOKです。</div></div>)}
 
-     <div className="mt-4 p-3 rounded-xl" style={{background:'#f8fafc',border:'1px solid #e2e8f0'}}>
-       <div className="font-bold text-slate-700 mb-1">📈 見るべきiXacsグラフ（ここを見る）</div>
-       <GraphView graph={q.graph}/>
-     </div>
+     {q.graph && (
+       <div className="mt-4 p-3 rounded-xl" style={{background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+         <div className="font-bold text-slate-700 mb-1">📈 見るべきiXacsグラフ（ここを見る）</div>
+         <GraphView graph={q.graph}/>
+       </div>
+     )}
+
+     {q.reveal && (
+       <div className="mt-4">
+         <div className="font-bold text-slate-700 mb-2">💡 実際の改善事例（{q.reveal.id}）</div>
+         <div className="rounded-xl border border-slate-200 p-3">
+           <div className="flex items-center justify-between"><Chip c={q.keyConcept}/><span className="text-xs font-bold text-emerald-600">{yfmt(q.reveal.yen)}/年</span></div>
+           <div className="font-bold text-sm mt-1 wmark">{q.reveal.title}</div>
+           <div className="text-xs text-slate-600 mt-1 wmark">{q.reveal.summary}</div>
+         </div>
+       </div>
+     )}
 
      {cases.length>0 && (
        <div className="mt-4">
@@ -669,7 +763,7 @@ function App(){
   const [cp,setCp]=useState(null);
   const [me,setMe]=useState(null);
 
-  const start=(p)=>{ setPlayer(p); setSession(shuffle(QUESTIONS).slice(0,SESSION_N)); setIdx(0); setResults([]); setMe(null); setPhase('quiz'); };
+  const start=(p)=>{ setPlayer(p); setSession(pickSession()); setIdx(0); setResults([]); setMe(null); setPhase('quiz'); };
   const finish=(all,cleared)=>{ const avg=Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
     const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now(),cleared};
     saveEntry(e); setMe(e); };
