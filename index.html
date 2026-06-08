@@ -10,6 +10,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="cases.js"></script>
+<script src="images/cases/manifest.js"></script>
 <style>
   body{background:#f7f9fc;color:#1f2937;font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif}
   .card{background:#fff;border:1px solid #e5e9f0;border-radius:16px;box-shadow:0 4px 16px rgba(20,40,70,.06)}
@@ -357,12 +358,18 @@ const CONCEPT_BANK = {
    {c:'カーボンニュートラル',t:'生産性向上で総運転時間・電力原単位を削減',kw:['出来高','生産性','原単位','総運転']},
  ],
 };
+const CASE_IMGS = window.CASE_IMGS || [];
+function caseImg(id){ // "CT-4032"->"ct_4032", "可動-1052"->"ka_1052"
+  const m = (id||'').match(/^(CT|可動|電力)-?(\d+)/); if(!m) return null;
+  const base = m[1]==='CT' ? 'ct_'+m[2] : m[1]==='可動' ? 'ka_'+m[2] : null;
+  return base && CASE_IMGS.indexOf(base)>=0 ? 'images/cases/'+base+'.jpg' : null;
+}
 const GEN_QUESTIONS = ((window.MUDA_CASES||[]).map((c,i)=>{
   const concept = LENS_LABEL[c.l]; const bank = concept && CONCEPT_BANK[concept];
   if(!bank) return null;
   return {id:'g'+i, type:'上位概念と対策', setsubi:c.s||'設備', kotei:c.k, nerai:c.n, lens:concept, keyConcept:concept,
     toi:`「${concept}」の視点で、この設備（${c.k||'—'}／狙い：${c.n||'CT短縮'}）に有効な改善案を3つ以上、具体的に挙げてください。`,
-    points:bank, reveal:{id:c.id,title:c.t,summary:c.d,yen:c.y}, cases:[]};
+    points:bank, reveal:{id:c.id,title:c.t,summary:c.d,yen:c.y,img:caseImg(c.id)}, cases:[]};
 }).filter(Boolean));
 
 const POOL = QUESTIONS.concat(GEN_QUESTIONS);
@@ -629,11 +636,12 @@ function Feedback({q,fb,idx,total,onNext}){
 
      {q.reveal && (
        <div className="mt-4">
-         <div className="font-bold text-slate-700 mb-2">💡 実際の改善事例（{q.reveal.id}）</div>
+         <div className="font-bold text-slate-700 mb-2">💡 実際の改善事例（{q.reveal.id}）— 改善前後の写真つき</div>
          <div className="rounded-xl border border-slate-200 p-3">
            <div className="flex items-center justify-between"><Chip c={q.keyConcept}/><span className="text-xs font-bold text-emerald-600">{yfmt(q.reveal.yen)}/年</span></div>
            <div className="font-bold text-sm mt-1 wmark">{q.reveal.title}</div>
-           <div className="text-xs text-slate-600 mt-1 wmark">{q.reveal.summary}</div>
+           {q.reveal.img && <img src={q.reveal.img} alt="改善事例（改善前後）" className="w-full rounded-lg border border-slate-200 mt-2"/>}
+           <div className="text-xs text-slate-600 mt-2 wmark">{q.reveal.summary}</div>
          </div>
        </div>
      )}
