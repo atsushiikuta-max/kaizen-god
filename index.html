@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>カイゼンの神様 | 観察の型で学ぶカイゼンクイズ</title>
+<meta name="description" content="旭鉄工の実改善事例239件で、10の観察視点（イマドキフキソカチ＋CN）を当てて学ぶカイゼンクイズ。" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="cases.js"></script>
+<style>
+  body{background:#0f172a;color:#e8edf5;font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif}
+  .glass{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);backdrop-filter:blur(6px)}
+  .pop{animation:pop .25s ease}
+  @keyframes pop{from{transform:scale(.96);opacity:.4}to{transform:scale(1);opacity:1}}
+  .lensbtn{transition:transform .12s ease, box-shadow .12s ease}
+  .lensbtn:hover{transform:translateY(-2px)}
+  .lensbtn:disabled{cursor:default;opacity:.55}
+  .lensbtn.sel{outline:3px solid #fff;transform:translateY(-2px)}
+  .lensbtn.correct{outline:3px solid #34d399;box-shadow:0 0 0 4px rgba(52,211,153,.3)}
+  .lensbtn.wrong{outline:3px solid #f87171}
+  textarea:focus{outline:2px solid #60a5fa}
+</style>
+</head>
+<body>
+<div id="root" class="min-h-screen"></div>
+
+<script type="text/babel" data-presets="react">
+const {useState} = React;
+const CASES = (window.MUDA_CASES || []);
+
+/* ===== 10 観察視点（イマドキフキソカチ ＋ CN） ===== */
+const LENSES = [
+ {k:'iru',  kana:'イ',label:'要るの？',        sub:'そもそも無くせないか',     c1:'#ff7a7a',c2:'#ff5a8a',
+  desc:'本当に必要な作業かを疑う。検査・帳票・工程を「やめられないか」から考える。付加価値ファースト。'},
+ {k:'machi',kana:'マ',label:'待ちをなくす',    sub:'人・モノ・設備・承認・情報', c1:'#ffb259',c2:'#ff8a3d',
+  desc:'付加価値を生まない待ちを見つける。手待ち・モノ待ち・設備待ち・承認待ち・情報待ち。'},
+ {k:'douji',kana:'ド',label:'同時に行う',      sub:'並行化できないか',         c1:'#ffd84d',c2:'#f9b115',
+  desc:'加工しながら次工程準備、移動しながら確認。同じ時間で付加価値を増やす。'},
+ {k:'kyori',kana:'キ',label:'距離を短く',      sub:'歩行・手・探す距離',       c1:'#7be08a',c2:'#36c95f',
+  desc:'人やモノの移動を減らす。まず歩いている量を見る。歩行時間は付加価値を生まない。'},
+ {k:'futai',kana:'フ',label:'付帯作業をなくす',sub:'記録・清掃・段取り・探し物', c1:'#46e2b4',c2:'#16c79a',
+  desc:'主作業以外を減らす。記録・清掃・段取り・準備・探し物を極力減らす。'},
+ {k:'kizukai',kana:'キ',label:'気遣いをなくす',sub:'仕組みで楽にする',         c1:'#62b6ff',c2:'#3d8bf7',
+  desc:'人の感覚や熟練への依存を減らす。「気を付ける」は対策ではない。仕組みで楽にする。'},
+ {k:'sokudo',kana:'ソ',label:'速度を速く',     sub:'作業・搬送・判断・伝達',     c1:'#8aa0ff',c2:'#5b7cfa',
+  desc:'スピードアップできないか。ムダを取った結果として速くなることを目指す。'},
+ {k:'kanri',kana:'カ',label:'管理をする',      sub:'標準化・見える化・異常管理', c1:'#b79bff',c2:'#9775fa',
+  desc:'条件を揃え安定させる。標準化・見える化・異常管理・目標管理。数字がない議論は感想。'},
+ {k:'choko',kana:'チ',label:'チョコ停をなくす',sub:'短時間停止を潰す',          c1:'#ff9ec4',c2:'#f7689f',
+  desc:'センサー誤作動・ワーク詰まり・位置ズレ。1回10秒でも何百回で大損失。'},
+ {k:'cn',   kana:'CN',label:'カーボンニュートラル',sub:'電力・エアー・CO₂',     c1:'#4ee0b0',c2:'#15c08a',
+  desc:'電力・エアー・燃料のムダを減らし、CO₂を低減する。ムダ取りは省エネに直結する。'},
+];
+const LMAP = {}; LENSES.forEach(l => LMAP[l.k] = l);
+
+const ROUNDS = 10;
+const yfmt = n => '¥' + (n||0).toLocaleString();
+
+/* ランク（視点正解数で決定） */
+function rankOf(correct){
+  if(correct>=10) return {nm:'カイゼンの神様',ic:'👑',c:'#f5a623'};
+  if(correct>=8)  return {nm:'匠',ic:'🏅',c:'#b79bff'};
+  if(correct>=6)  return {nm:'職長',ic:'📋',c:'#3d8bf7'};
+  if(correct>=4)  return {nm:'担当',ic:'🛠',c:'#16c79a'};
+  return {nm:'見習い',ic:'🔰',c:'#94a3b8'};
+}
+
+/* シャッフルして N 問選ぶ（lensが有効なものだけ） */
+function pickRounds(){
+  const pool = CASES.filter(c => LMAP[c.l] && c.d && c.d.length > 10);
+  const a = pool.slice();
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a.slice(0, ROUNDS);
+}
+
+/* 自由記述の簡易キーワードボーナス（dとの内容語の重なり、減点なし） */
+function freeBonus(input, d){
+  if(!input || input.trim().length < 4) return {pts:0, hits:[]};
+  const words = Array.from(new Set((d.match(/[一-龯ァ-ヶー]{2,}/g)||[])));
+  const hits = words.filter(w => input.includes(w));
+  return {pts: Math.min(50, hits.length*10), hits: hits.slice(0,6)};
+}
+
+function LensBadge({l, size=40}){
+  return (
+    <div style={{width:size,height:size,background:`linear-gradient(135deg,${l.c1},${l.c2})`}}
+         className="rounded-xl flex items-center justify-center font-black text-white shadow"
+         >{l.kana}</div>
+  );
+}
+
+/* ===== スタート画面 ===== */
+function Start({onStart}){
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-10">
+      <div className="text-center">
+        <div className="text-sm tracking-widest text-sky-300 font-bold">旭鉄工 観察主義 ｜ カイゼンクイズ</div>
+        <h1 className="text-4xl sm:text-5xl font-black mt-2 bg-gradient-to-r from-sky-300 to-emerald-300 bg-clip-text text-transparent">カイゼンの神様</h1>
+        <p className="mt-3 text-slate-300">実在の改善事例 <b className="text-white">{CASES.length}件</b> を題材に、<b>10の観察視点</b>を見抜く全{ROUNDS}問クイズ。<br/>正解数に応じて<b>見習い → 担当 → 職長 → 匠 → カイゼンの神様</b>へ。</p>
+      </div>
+
+      <div className="glass rounded-2xl p-5 mt-7">
+        <div className="font-bold mb-3 text-slate-200">10の観察視点</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {LENSES.map(l=>(
+            <div key={l.k} className="flex items-center gap-3">
+              <LensBadge l={l} size={38}/>
+              <div className="leading-tight">
+                <div className="font-bold text-sm">{l.label}</div>
+                <div className="text-xs text-slate-400">{l.sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="text-center mt-7">
+        <button onClick={onStart}
+          className="px-8 py-4 rounded-full font-black text-lg text-slate-900 bg-gradient-to-r from-sky-300 to-emerald-300 hover:opacity-90 shadow-lg">
+          クイズを始める（全{ROUNDS}問）
+        </button>
+        <p className="text-xs text-slate-500 mt-3">出題：工程・設備・狙いとヒントから「どの観察視点の改善か」を選びます。任意で自分の改善案も入力できます。</p>
+      </div>
+    </div>
+  );
+}
+
+/* ===== クイズ1問 ===== */
+function Quiz({round, idx, score, combo, onAnswer}){
+  const [sel, setSel] = useState(null);
+  const [free, setFree] = useState('');
+  const [done, setDone] = useState(false);
+  const correctK = round.l;
+  const cl = LMAP[correctK];
+  const hint = round.d.length > 50 ? round.d.slice(0,48) + '…' : round.d;
+
+  const submit = () => {
+    if(!sel || done) return;
+    setDone(true);
+    const ok = sel === correctK;
+    const fb = freeBonus(free, round.d);
+    const comboBonus = ok ? Math.min(60, combo*20) : 0;
+    const gained = (ok?100:0) + comboBonus + fb.pts;
+    onAnswer({ok, gained, fb, comboBonus});
+  };
+
+  const fb = done ? freeBonus(free, round.d) : null;
+  const ok = sel === correctK;
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between text-sm">
+        <div className="font-bold text-slate-300">第 {idx+1} / {ROUNDS} 問</div>
+        <div className="flex items-center gap-4">
+          {combo>1 && <span className="text-amber-300 font-black">🔥 {combo} コンボ</span>}
+          <span className="font-black text-emerald-300">SCORE {score}</span>
+        </div>
+      </div>
+      <div className="h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
+        <div className="h-full bg-gradient-to-r from-sky-400 to-emerald-400" style={{width:`${(idx/ROUNDS)*100}%`}}/>
+      </div>
+
+      {/* お題 */}
+      <div className="glass rounded-2xl p-5 mt-5 pop">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="px-2 py-1 rounded bg-white/10">工程：{round.k||'—'}</span>
+          <span className="px-2 py-1 rounded bg-white/10">設備：{round.s||'—'}</span>
+          <span className="px-2 py-1 rounded bg-white/10">狙い：{round.n||'—'}</span>
+        </div>
+        <div className="mt-3 text-lg font-bold">{round.t||'改善事例'}</div>
+        <div className="mt-2 text-slate-300">{hint}</div>
+        <div className="mt-3 font-bold text-sky-200">この改善は、どの観察視点でしょう？</div>
+      </div>
+
+      {/* 視点選択 */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 mt-4">
+        {LENSES.map(l=>{
+          let cls = 'lensbtn glass rounded-xl p-3 flex items-center gap-3 text-left';
+          if(!done && sel===l.k) cls+=' sel';
+          if(done && l.k===correctK) cls+=' correct';
+          if(done && sel===l.k && l.k!==correctK) cls+=' wrong';
+          return (
+            <button key={l.k} className={cls} disabled={done} onClick={()=>setSel(l.k)}>
+              <LensBadge l={l} size={36}/>
+              <div className="leading-tight">
+                <div className="font-bold text-sm">{l.label}</div>
+                <div className="text-[11px] text-slate-400">{l.sub}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 自由記述（任意） */}
+      <div className="mt-4">
+        <div className="text-xs text-slate-400 mb-1">あなたならどう改善する？（任意・キーワード一致でボーナス）</div>
+        <textarea value={free} onChange={e=>setFree(e.target.value)} disabled={done} rows={2}
+          placeholder="例）仮置きをやめてシュートで次工程へ直接流す"
+          className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-sm"/>
+      </div>
+
+      {/* 解説 / ボタン */}
+      {!done ? (
+        <div className="text-center mt-5">
+          <button onClick={submit} disabled={!sel}
+            className="px-8 py-3 rounded-full font-black text-slate-900 bg-gradient-to-r from-sky-300 to-emerald-300 disabled:opacity-40">
+            回答する
+          </button>
+        </div>
+      ) : (
+        <div className="glass rounded-2xl p-5 mt-5 pop">
+          <div className={`text-2xl font-black ${ok?'text-emerald-300':'text-rose-300'}`}>
+            {ok? '◯ 正解！' : '✕ 残念…'} <span className="text-base text-slate-300">正解は「{cl.label}」</span>
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <LensBadge l={cl} size={44}/>
+            <div className="text-sm text-slate-300">{cl.desc}</div>
+          </div>
+          <div className="mt-4 border-t border-white/10 pt-3">
+            <div className="text-xs text-slate-400">実際の改善内容</div>
+            <div className="text-sm mt-1">{round.d}</div>
+            <div className="mt-2 text-emerald-300 font-bold">労務費効果：{yfmt(round.y)}／年</div>
+          </div>
+          {fb && fb.pts>0 && (
+            <div className="mt-3 text-xs text-amber-200">
+              あなたの記述ボーナス +{fb.pts}（一致：{fb.hits.join('、')}）
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===== 結果画面 ===== */
+function Result({score, correct, onRetry}){
+  const r = rankOf(correct);
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-12 text-center">
+      <div className="text-7xl">{r.ic}</div>
+      <div className="text-sm text-slate-300 mt-2">あなたの称号</div>
+      <div className="text-4xl font-black mt-1" style={{color:r.c}}>{r.nm}</div>
+      <div className="glass rounded-2xl p-6 mt-7 inline-block">
+        <div className="text-slate-300 text-sm">スコア</div>
+        <div className="text-5xl font-black text-emerald-300">{score}</div>
+        <div className="text-slate-300 mt-3 text-sm">観察視点 正解</div>
+        <div className="text-2xl font-black">{correct} / {ROUNDS}</div>
+      </div>
+      <div className="mt-8">
+        <button onClick={onRetry}
+          className="px-8 py-3 rounded-full font-black text-slate-900 bg-gradient-to-r from-sky-300 to-emerald-300">
+          もう一度挑戦
+        </button>
+      </div>
+      <p className="text-xs text-slate-500 mt-6">出典：旭鉄工 実改善事例 {CASES.length}件 ／ 観察の型（イマドキフキソカチ＋CN）</p>
+    </div>
+  );
+}
+
+/* ===== アプリ本体 ===== */
+function App(){
+  const [phase, setPhase] = useState('start'); // start | quiz | result
+  const [rounds, setRounds] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [correct, setCorrect] = useState(0);
+  const [answered, setAnswered] = useState(false);
+
+  const start = () => {
+    setRounds(pickRounds()); setIdx(0); setScore(0); setCombo(0); setCorrect(0);
+    setAnswered(false); setPhase('quiz');
+  };
+
+  const onAnswer = ({ok, gained}) => {
+    setScore(s => s + gained);
+    setCombo(c => ok ? c+1 : 0);
+    if(ok) setCorrect(n => n+1);
+    setAnswered(true);
+  };
+  const next = () => {
+    if(idx+1 >= ROUNDS){ setPhase('result'); return; }
+    setIdx(i=>i+1); setAnswered(false);
+  };
+
+  if(CASES.length === 0){
+    return <div className="max-w-xl mx-auto p-10 text-center text-rose-300">事例データ(cases.js)が読み込めませんでした。</div>;
+  }
+
+  if(phase==='start') return <Start onStart={start}/>;
+  if(phase==='result') return <Result score={score} correct={correct} onRetry={()=>setPhase('start')}/>;
+
+  // quiz
+  const round = rounds[idx];
+  const handler = Object.assign(onAnswer, {next});
+  return (
+    <div>
+      <Quiz key={idx} round={round} idx={idx} score={score} combo={combo} onAnswer={handler}/>
+      {answered && (
+        <div className="max-w-3xl mx-auto px-4 pb-10 text-center">
+          <button onClick={next}
+            className="px-8 py-3 rounded-full font-black text-slate-900 bg-gradient-to-r from-sky-300 to-emerald-300">
+            {idx+1>=ROUNDS ? '結果を見る' : '次の問題へ'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
