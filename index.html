@@ -425,10 +425,14 @@ async function fetchShared(){
 }
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 const yfmt = n => '¥'+(n||0).toLocaleString();
-/* 1問ごとに上位概念を変えて出題（3問すべて異なるkeyConcept、各概念からランダムに1問） */
+/* 1問ごとに上位概念を変えて出題（3問すべて異なるkeyConcept）。
+   さらに必ず1問は「グラフの読み方」を含める（3回に1回はグラフ問題）。 */
 function pickSession(){
   const byC={}; POOL.forEach(q=>{ (byC[q.keyConcept]=byC[q.keyConcept]||[]).push(q); });
-  const concepts=shuffle(Object.keys(byC)), out=[];
+  const out=[], used={};
+  const graphs = POOL.filter(q=>q.type==='グラフの読み方');
+  if(graphs.length){ const g=graphs[Math.floor(Math.random()*graphs.length)]; out.push(g); used[g.keyConcept]=1; }
+  const concepts=shuffle(Object.keys(byC).filter(c=>!used[c]));
   for(const c of concepts){ if(out.length>=SESSION_N) break; const qs=byC[c]; out.push(qs[Math.floor(Math.random()*qs.length)]); }
   return shuffle(out).slice(0,SESSION_N);
 }
@@ -697,26 +701,6 @@ function Feedback({q,fb,idx,total,onNext}){
   );
 }
 
-/* ===== チェックポイント判定 ===== */
-function Checkpoint({cpIndex,passed,yen,target,onContinue,onGameover}){
-  return (
-   <div className="max-w-xl mx-auto px-4 py-12 text-center">
-     <div className="text-6xl">{passed?'🎉':'💥'}</div>
-     <h1 className="text-3xl font-black mt-3" style={{color:passed?'#16a34a':'#dc2626'}}>チェックポイント{cpIndex+1} {passed?'突破！':'未達…'}</h1>
-     <div className="card p-6 mt-6 inline-block">
-       <div className="text-slate-500 text-sm">累計改善額</div>
-       <div className="text-4xl font-black" style={{color:passed?'#16a34a':'#dc2626'}}>{yfmt(yen)}</div>
-       <div className="text-slate-500 text-sm mt-1">必達ライン {yfmt(target)}</div>
-     </div>
-     <div className="mt-8">
-       {passed
-        ? <button onClick={onContinue} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}>次の3問へ進む</button>
-        : <button onClick={onGameover} className="btn px-10 py-3 text-white" style={{background:'#dc2626'}}>結果を見る（ゲームオーバー）</button>}
-     </div>
-   </div>
-  );
-}
-
 /* ===== 弱点評価 ===== */
 function weakness(results){
   const byType={}; results.forEach(r=>{(byType[r.type]=byType[r.type]||[]).push(r.score);});
@@ -734,7 +718,7 @@ function Summary({player,results,clearedAll,onRanking,onRetry}){
   const yen=results.reduce((s,r)=>s+yenOf(r.score),0);
   return (
    <div className="max-w-2xl mx-auto px-4 py-10 text-center">
-     {clearedAll && <div className="text-emerald-600 font-black mb-2">👑 全チェックポイント突破！工場改革コンプリート</div>}
+     {clearedAll && <div className="text-emerald-600 font-black mb-2">🎉 全{SESSION_N}問クリア！あなたの役職は…</div>}
      <div className="text-6xl">{rk.ic}</div>
      <div className="text-sm text-slate-500 mt-2">{player.dept} ／ {player.name} さんの称号</div>
      <div className="text-4xl font-black mt-1" style={{color:rk.c}}>{rk.nm}</div>
@@ -766,7 +750,12 @@ function Summary({player,results,clearedAll,onRanking,onRetry}){
 /* ===== ランキング（個人＋部署別合計を同時表示） ===== */
 function Ranking({me,onBack}){
   const [lb,setLb]=useState(null);
-  useEffect(()=>{ let on=true; (async()=>{ const shared=await fetchShared(); const local=loadLB(); const map={}; shared.concat(local).forEach(e=>{ if(e&&e._id) map[e._id]=e; }); if(on) setLb(Object.values(map)); })(); return ()=>{on=false;}; },[]);
+  useEffect(()=>{ let on=true; (async()=>{
+    const shared=await fetchShared(); const map={};
+    shared.forEach(e=>{ if(e&&e._id) map[e._id]=e; });
+    if(me && me._id && !map[me._id]) map[me._id]=me; // 自分の直近結果は即反映（共有反映前の保険）
+    if(on) setLb(Object.values(map));
+  })(); return ()=>{on=false;}; },[]);
   if(lb===null) return (<div className="max-w-4xl mx-auto px-4 py-8"><div className="flex items-center justify-between"><h1 className="text-2xl font-black text-slate-800">🏅 ランキング</h1><button onClick={onBack} className="btn px-4 py-2 border border-slate-300 bg-white text-slate-600">戻る</button></div><div className="text-slate-400 mt-10 text-center">読み込み中…</div></div>);
   const indiv=lb.slice().sort((a,b)=>b.avg-a.avg||b.date-a.date).slice(0,20);
   const agg={}; lb.forEach(e=>{const g=agg[e.dept]=agg[e.dept]||{sum:0,n:0,best:0}; g.sum+=e.avg; g.n++; g.best=Math.max(g.best,e.avg);});
@@ -799,28 +788,20 @@ function App(){
   const [session,setSession]=useState([]);
   const [idx,setIdx]=useState(0);
   const [results,setResults]=useState([]);
-  const [cp,setCp]=useState(null);
   const [me,setMe]=useState(null);
 
   const start=(p)=>{ setPlayer(p); setSession(pickSession()); setIdx(0); setResults([]); setMe(null); setPhase('quiz'); };
-  const finish=(all,cleared)=>{ const avg=Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
-    const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now(),cleared};
+  const finish=(all)=>{ const avg=Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
+    const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now()};
     saveEntry(e); pushShared(e); setMe(e); };
   const onDone=(res)=>{
     const all=[...results,res]; setResults(all);
-    if(all.length>=SESSION_N){ finish(all,true); setPhase('summary'); }
+    if(all.length>=SESSION_N){ finish(all); setPhase('summary'); }
     else setIdx(idx+1);
-  };
-  const afterCP=()=>{
-    if(!cp.passed){ finish(results,false); setPhase('gameover'); return; }
-    if(cp.isLast){ finish(results,true); setPhase('summary'); return; }
-    setIdx(idx+1); setPhase('quiz');
   };
 
   if(phase==='start') return <Start onStart={start} onRanking={()=>{setBack('start');setPhase('ranking');}}/>;
   if(phase==='ranking') return <Ranking me={me} onBack={()=>setPhase(back)}/>;
-  if(phase==='checkpoint') return <Checkpoint {...cp} onContinue={afterCP} onGameover={afterCP}/>;
-  if(phase==='gameover') return <Summary player={player} results={results} clearedAll={false} onRanking={()=>{setBack('gameover');setPhase('ranking');}} onRetry={()=>setPhase('start')}/>;
   if(phase==='summary') return <Summary player={player} results={results} clearedAll={true} onRanking={()=>{setBack('summary');setPhase('ranking');}} onRetry={()=>setPhase('start')}/>;
 
   return <Quiz key={idx} q={session[idx]} idx={idx} total={session.length} results={results} onDone={onDone}/>;
