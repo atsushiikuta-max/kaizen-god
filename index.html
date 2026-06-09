@@ -590,15 +590,33 @@ function grade(q, ans){
 /* 「異なる上位概念の対策を一つずつ・合計3つ」用の評価。
    回答が何種類の上位概念の対策をカバーできているかで採点する。 */
 const MULTI_PROMPT = 'この設備・現象に対して、異なる上位概念の対策を「一つずつ・合計3つ」挙げてください。\n（例：待ちを無くす→電源OFF ／ 要るの？→工程廃止 ／ 管理をする→流量適正化）';
-function gradeMulti(ans){
-  const a = norm(ans);
-  const covered=[]; // {c, t}
-  Object.keys(CONCEPT_BANK).forEach(c=>{
-    let best=null;
-    for(const p of CONCEPT_BANK[c]){ if(p.kw.some(k=>a.includes(norm(k)))){ best=p; break; } }
-    if(best) covered.push({c, t:best.t});
+// 1項目（1行）＝1つの上位概念として判定する。1つの対策が複数概念に二重カウントされるのを防ぐ。
+function conceptOfLine(line){
+  const a = norm(line);
+  const keys = Object.keys(CONCEPT_BANK);
+  // ① 明示的に上位概念名が書かれていればそれを採用
+  for(const c of keys){
+    if(a.includes(norm(c))){
+      let t = CONCEPT_BANK[c][0].t;
+      for(const p of CONCEPT_BANK[c]){ if(p.kw.some(k=>a.includes(norm(k)))){ t=p.t; break; } }
+      return {c, t};
+    }
+  }
+  // ② キーワード一致が最も多い概念を1つだけ採用
+  let best=null,bestN=0,bestT=null;
+  keys.forEach(c=>{
+    let n=0,t=null;
+    for(const p of CONCEPT_BANK[c]){ const hit=p.kw.filter(k=>a.includes(norm(k))).length; if(hit>0){ n+=hit; if(!t)t=p.t; } }
+    if(n>bestN){ bestN=n; best=c; bestT=t; }
   });
-  const ngHits = NG.filter(n=>a.includes(norm(n)));
+  return best?{c:best,t:bestT}:null;
+}
+function gradeMulti(ans){
+  const lines = ans.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  const items = lines.length>=2 ? lines : ans.split(/[、,／\/]+/).map(s=>s.trim()).filter(Boolean);
+  const seen=new Set(), covered=[];
+  items.forEach(line=>{ const r=conceptOfLine(line); if(r && !seen.has(r.c)){ seen.add(r.c); covered.push(r); } });
+  const ngHits = NG.filter(n=>norm(ans).includes(norm(n)));
   const distinct = covered.length;
   let s = distinct>=4?100 : distinct===3?92 : distinct===2?70 : distinct===1?45 : (ans.trim().length>6?15:0);
   s -= ngHits.length*15;
