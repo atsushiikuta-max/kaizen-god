@@ -26,7 +26,7 @@
 <div id="root" class="min-h-screen"></div>
 
 <script type="text/babel" data-presets="react">
-const {useState} = React;
+const {useState, useEffect} = React;
 
 /* ===== 部署（添付より。未来ものづくり製造部→西尾機械製造部に変更） ===== */
 const DEPTS = ['社長室','経営企画部','経理・財務部','人事・総務部','営業部','戦略調達部','品質保証部','本社製造部','西尾機械製造部','西尾鋳鍛製造部','製造エンジニアリング部','タイ事業室','その他'];
@@ -395,6 +395,19 @@ function grade(q, ans){
 const LB_KEY = 'kaizenGod_ranking_v2';
 const loadLB = () => { try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(e){return [];} };
 const saveEntry = e => { const lb=loadLB(); lb.push(e); localStorage.setItem(LB_KEY,JSON.stringify(lb)); };
+
+/* ===== 共有ランキング（Firebase Realtime Database / REST） =====
+   DB_URL に Realtime Database の URL を入れると全プレイヤーで共有される。
+   未設定ならローカル（localStorage）のみで動作。 */
+const DB_URL = ''; // 例: 'https://kaizen-god-default-rtdb.firebaseio.com'
+async function pushShared(entry){
+  if(!DB_URL) return;
+  try{ await fetch(DB_URL+'/leaderboard.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)}); }catch(e){}
+}
+async function fetchShared(){
+  if(!DB_URL) return [];
+  try{ const r=await fetch(DB_URL+'/leaderboard.json'); const j=await r.json(); return j?Object.values(j):[]; }catch(e){ return []; }
+}
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 const yfmt = n => '¥'+(n||0).toLocaleString();
 /* 上位概念が偏らないように9問を抽選（同一keyConceptは最大2問） */
@@ -736,7 +749,9 @@ function Summary({player,results,clearedAll,onRanking,onRetry}){
 
 /* ===== ランキング（個人＋部署別合計を同時表示） ===== */
 function Ranking({me,onBack}){
-  const lb=loadLB();
+  const [lb,setLb]=useState(null);
+  useEffect(()=>{ let on=true; (async()=>{ const shared=await fetchShared(); const local=loadLB(); const map={}; shared.concat(local).forEach(e=>{ if(e&&e._id) map[e._id]=e; }); if(on) setLb(Object.values(map)); })(); return ()=>{on=false;}; },[]);
+  if(lb===null) return (<div className="max-w-4xl mx-auto px-4 py-8"><div className="flex items-center justify-between"><h1 className="text-2xl font-black text-slate-800">🏅 ランキング</h1><button onClick={onBack} className="btn px-4 py-2 border border-slate-300 bg-white text-slate-600">戻る</button></div><div className="text-slate-400 mt-10 text-center">読み込み中…</div></div>);
   const indiv=lb.slice().sort((a,b)=>b.avg-a.avg||b.date-a.date).slice(0,20);
   const agg={}; lb.forEach(e=>{const g=agg[e.dept]=agg[e.dept]||{sum:0,n:0,best:0}; g.sum+=e.avg; g.n++; g.best=Math.max(g.best,e.avg);});
   const deptSum=Object.keys(agg).map(d=>({dept:d,sum:agg[d].sum,n:agg[d].n,avg:Math.round(agg[d].sum/agg[d].n)})).sort((a,b)=>b.sum-a.sum);
@@ -774,7 +789,7 @@ function App(){
   const start=(p)=>{ setPlayer(p); setSession(pickSession()); setIdx(0); setResults([]); setMe(null); setPhase('quiz'); };
   const finish=(all,cleared)=>{ const avg=Math.round(all.reduce((s,r)=>s+r.score,0)/all.length);
     const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now(),cleared};
-    saveEntry(e); setMe(e); };
+    saveEntry(e); pushShared(e); setMe(e); };
   const onDone=(res)=>{
     const all=[...results,res]; setResults(all); const n=all.length;
     const cpDef=CHECKPOINTS.find(c=>c.at===n);
