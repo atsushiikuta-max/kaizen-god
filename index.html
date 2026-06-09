@@ -587,6 +587,27 @@ function grade(q, ans){
   return {score:s, matched, missed, keyCovered, ngHits};
 }
 
+/* 「異なる上位概念の対策を一つずつ・合計3つ」用の評価。
+   回答が何種類の上位概念の対策をカバーできているかで採点する。 */
+const MULTI_PROMPT = 'この設備・現象に対して、異なる上位概念の対策を「一つずつ・合計3つ」挙げてください。\n（例：待ちを無くす→電源OFF ／ 要るの？→工程廃止 ／ 管理をする→流量適正化）';
+function gradeMulti(ans){
+  const a = norm(ans);
+  const covered=[]; // {c, t}
+  Object.keys(CONCEPT_BANK).forEach(c=>{
+    let best=null;
+    for(const p of CONCEPT_BANK[c]){ if(p.kw.some(k=>a.includes(norm(k)))){ best=p; break; } }
+    if(best) covered.push({c, t:best.t});
+  });
+  const ngHits = NG.filter(n=>a.includes(norm(n)));
+  const distinct = covered.length;
+  let s = distinct>=4?100 : distinct===3?92 : distinct===2?70 : distinct===1?45 : (ans.trim().length>6?15:0);
+  s -= ngHits.length*15;
+  s = Math.max(0, Math.min(100, Math.round(s)));
+  const have = covered.map(x=>x.c);
+  const missing = Object.keys(CONCEPT_BANK).filter(c=>have.indexOf(c)<0);
+  return {multi:true, score:s, covered, distinct, missing, ngHits};
+}
+
 /* ===== ランキング保存 ===== */
 const LB_KEY = 'kaizenGod_ranking_v2';
 const loadLB = () => { try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(e){return [];} };
@@ -825,7 +846,7 @@ function Start({onStart,onRanking}){
      <div className="text-center">
        <div className="text-sm tracking-widest font-bold text-sky-600">旭鉄工 ｜ 観察の型で学ぶカイゼン採点ゲーム</div>
        <h1 className="text-4xl sm:text-5xl font-black mt-2 text-slate-800">カイゼンの神様</h1>
-       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。全{SESSION_N}問で<b>役職を判定</b>＆ランキング。グラフの読み方も出題されます。<br/><span className="text-xs text-slate-400">全{POOL.length}問から、上位概念が重複しないように毎回ランダムで{SESSION_N}問出題</span></p>
+       <p className="mt-3 text-slate-600">設備・現象に対し<b>異なる上位概念の対策を一つずつ・3つ</b>挙げて回答。全{SESSION_N}問で<b>役職を判定</b>＆ランキング。グラフの読み方問題も出ます。<br/><span className="text-xs text-slate-400">全{POOL.length}問から、上位概念が重複しないように毎回ランダムで{SESSION_N}問出題</span></p>
      </div>
      <div className="card p-6 mt-6">
        <label className="block text-sm font-bold text-slate-500 mb-1">部署を選択</label>
@@ -852,7 +873,8 @@ function Start({onStart,onRanking}){
 /* ===== クイズ ===== */
 function Quiz({q,idx,total,results,onDone}){
   const [ans,setAns]=useState(''); const [fb,setFb]=useState(null);
-  const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(grade(q,ans)); };
+  const multi = q.type!=='グラフの読み方';
+  const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(multi?gradeMulti(ans):grade(q,ans)); };
   return (
    <div className="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-4 gap-4 items-start">
      {/* 左：上位概念（縦並び・常時表示） */}
@@ -873,21 +895,21 @@ function Quiz({q,idx,total,results,onDone}){
          <div className="text-xs font-bold text-slate-400">設 備</div>
          <div className="text-lg font-bold text-slate-800 wmark">{q.setsubi}</div>
          {(q.kotei||q.nerai) && <div className="text-xs text-slate-500 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
-         {q.lens && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
+         {q.lens && !multi && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
          {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
          {q.graph && <div className="mt-3"><div className="text-xs font-bold text-slate-400 mb-1">グラフ</div><GraphView graph={q.graph} hideNote/></div>}
-         <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{q.toi}</span></div>
+         <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{multi?MULTI_PROMPT:q.toi}</span></div>
        </div>
 
        <div className="mt-3">
-         <div className="text-xs text-slate-500 mb-1">あなたの回答（改善案を改行で複数。上位概念も書くと加点されやすい）</div>
-         <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6} placeholder={'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止'} className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
+         <div className="text-xs text-slate-500 mb-1">{multi?'あなたの回答（異なる上位概念の対策を1行ずつ、3つ。「上位概念：対策」の形で書くと分かりやすい）':'あなたの回答（考えられる要因・確認すべきことを挙げてください）'}</div>
+         <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6} placeholder={multi?'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止\n管理をする：圧力・流量を適正化する':'例）標準作業を守れているか／品番切替が正しいか／作業者差…'} className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
        </div>
 
        {!fb ? (
          <div className="text-center mt-4"><button disabled={ans.trim().length===0} onClick={submit} className="btn px-10 py-3 text-white" style={{background:ans.trim()?'linear-gradient(90deg,#0ea5e9,#22c55e)':'#cbd5e1'}}>採点する</button></div>
        ) : (
-         <Feedback q={q} fb={fb} idx={idx} total={total} onNext={()=>onDone({qid:q.id,type:q.type,keyConcept:q.keyConcept,keyCovered:fb.keyCovered,score:fb.score})}/>
+         <Feedback q={q} fb={fb} idx={idx} total={total} onNext={()=>onDone({qid:q.id,type:q.type,keyConcept:q.keyConcept,keyCovered:fb.multi?(fb.distinct>=3):fb.keyCovered,score:fb.score})}/>
        )}
      </div>
      {/* 右：経営ダッシュボード */}
@@ -902,13 +924,24 @@ function Feedback({q,fb,idx,total,onNext}){
   const cases=(q.cases||[]).map(id=>CASES[id]).filter(Boolean);
   return (
    <div className="card p-5 mt-4 pop">
-     <div className="text-center"><span className="text-5xl font-black" style={{color:cls}}>{fb.score}</span><span className="text-slate-500 font-bold"> / 100点</span><span className="text-sm text-slate-400 ml-2">(改善額 {yfmt(yenOf(fb.score))})</span></div>
+     <div className="text-center"><span className="text-5xl font-black" style={{color:cls}}>{fb.score}</span><span className="text-slate-500 font-bold"> / 100点</span>{fb.multi
+       ? <span className="text-sm font-bold ml-2" style={{color:fb.distinct>=3?'#16a34a':'#ea580c'}}>異なる上位概念 {fb.distinct}/3</span>
+       : <span className="text-sm text-slate-400 ml-2">(改善額 {yfmt(yenOf(fb.score))})</span>}</div>
 
-     {fb.matched.length>0 && (<div className="mt-4"><div className="font-bold" style={{color:'#16a34a'}}>◎ 良かった点</div><ul className="mt-1 space-y-1">{fb.matched.map((p,i)=><li key={i} className="text-sm wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
-
-     {!fb.keyCovered && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ 最重要の視点が抜けています</div><div className="text-sm text-slate-700 mt-1">今回の最重要は <Chip c={q.keyConcept}/> です。{q.keyConcept==='品番切替'?' CTヒストグラムで山が2つある時は、まず「品番切替が適切か」を疑います。':' この観点の改善案を必ず入れましょう。'}</div></div>)}
-
-     {fb.missed.length>0 && (<div className="mt-4"><div className="font-bold text-slate-700">＋ 他に考えられる改善案（模範例）</div><ul className="mt-1 space-y-1">{fb.missed.map((p,i)=><li key={i} className="text-sm text-slate-600 wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
+     {fb.multi ? (
+       <div>
+         {fb.covered.length>0 && (<div className="mt-4"><div className="font-bold" style={{color:'#16a34a'}}>✅ 使えた上位概念（{fb.distinct}種類）</div><ul className="mt-1 space-y-1">{fb.covered.map((x,i)=><li key={i} className="text-sm wmark"><Chip c={x.c}/>{x.t}</li>)}</ul></div>)}
+         {fb.distinct<3
+           ? (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ あと{3-fb.distinct}個、別の上位概念の対策を挙げましょう</div><div className="text-xs text-slate-500 mt-1">例（まだ使っていない上位概念）：</div><ul className="mt-1 space-y-1">{fb.missing.slice(0,4).map((c,i)=><li key={i} className="text-sm text-slate-700 wmark"><Chip c={c}/>{CONCEPT_BANK[c][0].t}</li>)}</ul></div>)
+           : (<div className="mt-4 p-3 rounded-xl text-emerald-700 font-bold" style={{background:'#ecfdf5',border:'1px solid #a7f3d0'}}>◎ 3つ以上の異なる上位概念で対策できています！素晴らしい！</div>)}
+       </div>
+     ) : (
+       <div>
+         {fb.matched.length>0 && (<div className="mt-4"><div className="font-bold" style={{color:'#16a34a'}}>◎ 良かった点</div><ul className="mt-1 space-y-1">{fb.matched.map((p,i)=><li key={i} className="text-sm wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
+         {!fb.keyCovered && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ 最重要の視点が抜けています</div><div className="text-sm text-slate-700 mt-1">今回の最重要は <Chip c={q.keyConcept}/> です。{q.keyConcept==='品番切替'?' CTヒストグラムで山が2つある時は、まず「品番切替が適切か」を疑います。':' この観点の改善案を必ず入れましょう。'}</div></div>)}
+         {fb.missed.length>0 && (<div className="mt-4"><div className="font-bold text-slate-700">＋ 他に考えられる改善案（模範例）</div><ul className="mt-1 space-y-1">{fb.missed.map((p,i)=><li key={i} className="text-sm text-slate-600 wmark"><Chip c={p.c}/>{p.t}</li>)}</ul></div>)}
+       </div>
+     )}
 
      {fb.ngHits.length>0 && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fef2f2',border:'1px solid #fecaca'}}><div className="font-bold text-rose-700">✕ 予防保全はNG（−{fb.ngHits.length*15}点）</div><div className="text-sm text-slate-700 mt-1">当社の方針として予防保全は行いません（{fb.ngHits.join('、')}）。原因の修理・設定の適正化は「管理をする」としてOKです。</div></div>)}
 
