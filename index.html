@@ -399,7 +399,7 @@ const saveEntry = e => { const lb=loadLB(); lb.push(e); localStorage.setItem(LB_
 /* ===== 共有ランキング（Firebase Realtime Database / REST） =====
    DB_URL に Realtime Database の URL を入れると全プレイヤーで共有される。
    未設定ならローカル（localStorage）のみで動作。 */
-const DB_URL = ''; // 例: 'https://kaizen-god-default-rtdb.firebaseio.com'
+const DB_URL = 'https://kaizen-god-174a0-default-rtdb.asia-southeast1.firebasedatabase.app';
 async function pushShared(entry){
   if(!DB_URL) return;
   try{ await fetch(DB_URL+'/leaderboard.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)}); }catch(e){}
