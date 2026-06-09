@@ -632,8 +632,14 @@ const yfmt = n => '¥'+(n||0).toLocaleString();
 function pickSession(){
   const byC={}; POOL.forEach(q=>{ (byC[q.keyConcept]=byC[q.keyConcept]||[]).push(q); });
   const out=[], used={};
+  // 必ず1問はグラフ問題。うち約半分はCTヒストグラムを保証（他のグラフ種に埋もれないように）。
   const graphs = POOL.filter(q=>q.type==='グラフの読み方');
-  if(graphs.length){ const g=graphs[Math.floor(Math.random()*graphs.length)]; out.push(g); used[g.keyConcept]=1; }
+  const hists  = graphs.filter(q=>q.graph && q.graph.kind==='hist');
+  const others = graphs.filter(q=>!(q.graph && q.graph.kind==='hist'));
+  let pickFrom = graphs;
+  if(hists.length && others.length) pickFrom = (Math.random()<0.5 ? hists : others);
+  else if(hists.length) pickFrom = hists;
+  if(pickFrom.length){ const g=pickFrom[Math.floor(Math.random()*pickFrom.length)]; out.push(g); used[g.keyConcept]=1; }
   const concepts=shuffle(Object.keys(byC).filter(c=>!used[c]));
   for(const c of concepts){ if(out.length>=SESSION_N) break; const qs=byC[c]; out.push(qs[Math.floor(Math.random()*qs.length)]); }
   return shuffle(out).slice(0,SESSION_N);
