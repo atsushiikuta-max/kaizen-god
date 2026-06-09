@@ -63,8 +63,8 @@ const rankOf = avg => RANKS.find(r=>avg>=r.min) || RANKS[RANKS.length-1];
 
 /* ===== チェックポイント（3問ごと・累計改善額の必達ライン） ===== */
 const yenOf = score => Math.round(score/100*120000); // 1問 最大¥120,000
-const CHECKPOINTS = [{at:3,target:180000},{at:6,target:420000},{at:9,target:700000}];
-const SESSION_N = 9;
+const CHECKPOINTS = [];
+const SESSION_N = 3;
 
 /* ===== KPI 経営ダッシュボード ===== */
 const KPI_BASE = {rieki:6.5, nouki:72, furyo:8.5, seisan:58};
@@ -294,6 +294,21 @@ const QUESTIONS = [
    {c:'気遣いを無くす',t:'やりにくい作業をやりやすくする',kw:['やりにくい','やりやす']},
    {c:'管理をする',t:'現場をよく観察して原因を特定する',kw:['観察','現場','原因','特定']},
   ]}),
+ Q({id:'q19',type:'グラフの読み方',setsubi:'ある設備（CTヒストグラム）',
+  genshou:['設定CT：40秒','最頻CT：48秒','グラフの山が2つある（48秒付近と65秒付近）','ばらつきも大きい'],
+  toi:'このグラフから考えられる問題点や確認すべきことを、できるだけ多く挙げてください（5項目以上が目標）。「なぜ最頻CTが設定CTより長いのか」「なぜ山が2つあるのか」「なぜばらつきが大きいのか」「現場で何を確認すべきか」の観点で。',
+  keyConcept:'品番切替',
+  graph:{kind:'hist',spec:{min:36,max:72,mean:48,std:2.2,peak:15,m2:65,m2ratio:0.85,setCT:40,warnCT:52},
+    note:'最頻CT(48s)が設定CT(40s)より長く、48s付近と65s付近に山が2つ。まず品番切替（iXacsの品番設定違い）を疑う。'},
+  cases:[],
+  points:[
+   {c:'品番切替',key:true,t:'2山＝品番切替ミス／iXacsの品番設定違い（設定CTの異なる品番が混在）',kw:['品番','切替','切り替え','品種','設定違い','混在']},
+   {c:'管理をする',t:'最頻CTが設定CTより長い→標準作業を守れているか・設定CTが実態に合っているか',kw:['標準','設定ct','実態','守','長い','見直']},
+   {c:'要るの？',t:'管理者が把握していない工程追加がないか',kw:['工程追加','追加','把握','余計']},
+   {c:'気遣いを無くす',t:'作業者差・人の判断による検査ばらつき・やりにくさ',kw:['作業者','人','検査','ばらつき','やりにくい','習熟','新人']},
+   {c:'チョコ停を無くす',t:'チョコ停・頻発停止・設備老朽化でCTが延びていないか',kw:['チョコ停','頻発','老朽','停止','詰まり','トラブル']},
+   {c:'管理をする',t:'CT時系列・可動率/出来高率・時間別累計停止時間も確認し、現場で動作を観察する',kw:['ct時系列','可動率','出来高','停止時間','現場','観察']},
+  ]}),
 ];
 /* ===== 実改善事例239件から問題を自動生成（合計250問超のプール） ===== */
 const LENS_LABEL = {iru:'要るの？',machi:'待ちを無くす',douji:'同時に行う',kyori:'距離を短く',futai:'付帯作業を無くす',kizukai:'気遣いを無くす',sokudo:'速度を速く',kanri:'管理をする',choko:'チョコ停を無くす',cn:'カーボンニュートラル'};
@@ -410,25 +425,27 @@ async function fetchShared(){
 }
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 const yfmt = n => '¥'+(n||0).toLocaleString();
-/* 上位概念が偏らないように9問を抽選（同一keyConceptは最大2問） */
+/* 1問ごとに上位概念を変えて出題（3問すべて異なるkeyConcept、各概念からランダムに1問） */
 function pickSession(){
-  const sh=shuffle(POOL), out=[], cap={};
-  for(const q of sh){ if(out.length>=SESSION_N) break; const k=q.keyConcept; if((cap[k]||0)>=2) continue; cap[k]=(cap[k]||0)+1; out.push(q); }
-  for(const q of sh){ if(out.length>=SESSION_N) break; if(out.indexOf(q)<0) out.push(q); }
-  return out;
+  const byC={}; POOL.forEach(q=>{ (byC[q.keyConcept]=byC[q.keyConcept]||[]).push(q); });
+  const concepts=shuffle(Object.keys(byC)), out=[];
+  for(const c of concepts){ if(out.length>=SESSION_N) break; const qs=byC[c]; out.push(qs[Math.floor(Math.random()*qs.length)]); }
+  return shuffle(out).slice(0,SESSION_N);
 }
 
 /* ============ SVG チャート（見るべきグラフの図解） ============ */
-function HistChart({variant}){
+function HistChart({variant,spec}){
   const W=560,H=200,padL=30,padB=22,padT=8,padR=8;
-  const step=0.2,setCT=37,warnCT=44;
-  const cfg={
-    bimodal:{min:36,max:48,mean:39.5,std:1.0,peak:16,m2:45},
-    shiftRight:{min:36,max:48,mean:42,std:1.4,peak:16,m2:null},
-    shiftLeft:{min:33,max:46,mean:35.4,std:0.9,peak:16,m2:null},
-    wide:{min:34,max:48,mean:40,std:2.6,peak:11,m2:null},
-  }[variant] || {min:36,max:48,mean:40,std:1.4,peak:16,m2:null};
-  const {min,max,mean,std,peak,m2}=cfg, r2=0.95;
+  const cfgs={
+    bimodal:{min:36,max:48,mean:39.5,std:1.0,peak:16,m2:45,setCT:37,warnCT:44},
+    shiftRight:{min:36,max:48,mean:42,std:1.4,peak:16,m2:null,setCT:37,warnCT:44},
+    shiftLeft:{min:33,max:46,mean:35.4,std:0.9,peak:16,m2:null,setCT:37,warnCT:44},
+    wide:{min:34,max:48,mean:40,std:2.6,peak:11,m2:null,setCT:37,warnCT:44},
+  };
+  const base=cfgs[variant]||{min:36,max:48,mean:40,std:1.4,peak:16,m2:null,setCT:37,warnCT:44};
+  const cfg=spec?Object.assign({},base,spec):base;
+  const {min,max,mean,std,peak,m2,setCT,warnCT}=cfg, r2=cfg.m2ratio||0.9;
+  const step=(max-min)/90;
   const bins=[]; for(let x=min;x<=max+1e-9;x+=step){
     const i=Math.round((x-min)/step);
     let g=Math.exp(-((x-mean)**2)/(2*std*std));
@@ -483,13 +500,13 @@ function BarChart({data,hi}){
    </svg>
   );
 }
-function GraphView({graph}){
+function GraphView({graph,hideNote}){
   return (
    <div>
-     {graph.kind==='hist' && <HistChart variant={graph.variant}/>}
+     {graph.kind==='hist' && <HistChart variant={graph.variant} spec={graph.spec}/>}
      {graph.kind==='power' && <PowerChart/>}
      {graph.kind==='bar' && <BarChart data={graph.data} hi={graph.hi}/>}
-     <div className="text-xs mt-1 wmark" style={{color:'#b45309'}}>👀 {graph.note}</div>
+     {!hideNote && <div className="text-xs mt-1 wmark" style={{color:'#b45309'}}>👀 {graph.note}</div>}
    </div>
   );
 }
@@ -527,7 +544,6 @@ function Dashboard({results, idx}){
   const yen=results.reduce((s,r)=>s+yenOf(r.score),0);
   const avg=results.length?Math.round(results.reduce((s,r)=>s+r.score,0)/results.length):0;
   const rk=rankOf(avg);
-  const nextCP=CHECKPOINTS.find(c=>c.at>idx)||CHECKPOINTS[CHECKPOINTS.length-1];
   return (
    <div className="card p-4">
      <div className="font-bold text-slate-700 flex items-center gap-1 mb-2">📊 経営ダッシュボード</div>
@@ -536,11 +552,10 @@ function Dashboard({results, idx}){
      <Bar label="不良率" val={k.furyo} unit="%" max={15}/>
      <Bar label="生産性" val={k.seisan} unit="%" max={100} good/>
      <div className="border-t border-slate-100 mt-3 pt-3">
-       <div className="font-bold text-slate-700 flex items-center gap-1 mb-1">🏅 昇進トラッカー</div>
+       <div className="font-bold text-slate-700 flex items-center gap-1 mb-1">🏅 役職トラッカー</div>
        <div className="flex justify-between text-sm"><span className="text-slate-500">現在の称号</span><span className="font-black" style={{color:rk.c}}>{rk.ic}{rk.nm}</span></div>
-       <div className="flex justify-between text-sm"><span className="text-slate-500">次のチェックポイント</span><span className="font-bold text-sky-700">CP{CHECKPOINTS.indexOf(nextCP)+1}（あと{Math.max(0,nextCP.at-idx)}問）</span></div>
-       <div className="flex justify-between text-sm"><span className="text-slate-500">必達ライン(累計改善額)</span><span className="font-bold">{yfmt(yen)} / {yfmt(nextCP.target)}</span></div>
-       <div className="h-2 bg-slate-100 rounded-full overflow-hidden mt-1"><div className="h-full rounded-full" style={{width:Math.min(100,yen/nextCP.target*100)+'%',background:yen>=nextCP.target?'#22c55e':'#f59e0b'}}/></div>
+       <div className="flex justify-between text-sm"><span className="text-slate-500">ゴールまで</span><span className="font-bold text-sky-700">あと{Math.max(0,SESSION_N-idx)}問</span></div>
+       <div className="flex justify-between text-sm"><span className="text-slate-500">累計改善額</span><span className="font-bold">{yfmt(yen)}</span></div>
      </div>
    </div>
   );
@@ -554,7 +569,7 @@ function Start({onStart,onRanking}){
      <div className="text-center">
        <div className="text-sm tracking-widest font-bold text-sky-600">旭鉄工 ｜ 観察の型で学ぶカイゼン採点ゲーム</div>
        <h1 className="text-4xl sm:text-5xl font-black mt-2 text-slate-800">カイゼンの神様</h1>
-       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。3問ごとの<b>必達ライン</b>を突破し、経営ダッシュボードを改善して<b>カイゼン神様</b>を目指せ！<br/><span className="text-xs text-slate-400">全{POOL.length}問からランダムに{SESSION_N}問を出題</span></p>
+       <p className="mt-3 text-slate-600">改善案を考え<b>上位概念</b>で分類して回答。全{SESSION_N}問で<b>役職を判定</b>＆ランキング。グラフの読み方も出題されます。<br/><span className="text-xs text-slate-400">全{POOL.length}問から、上位概念が重複しないように毎回ランダムで{SESSION_N}問出題</span></p>
      </div>
      <div className="card p-6 mt-6">
        <label className="block text-sm font-bold text-slate-500 mb-1">部署を選択</label>
@@ -604,6 +619,7 @@ function Quiz({q,idx,total,results,onDone}){
          {(q.kotei||q.nerai) && <div className="text-xs text-slate-500 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
          {q.lens && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
          {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
+         {q.graph && <div className="mt-3"><div className="text-xs font-bold text-slate-400 mb-1">グラフ</div><GraphView graph={q.graph} hideNote/></div>}
          <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{q.toi}</span></div>
        </div>
 
@@ -640,10 +656,10 @@ function Feedback({q,fb,idx,total,onNext}){
 
      {fb.ngHits.length>0 && (<div className="mt-4 p-3 rounded-xl" style={{background:'#fef2f2',border:'1px solid #fecaca'}}><div className="font-bold text-rose-700">✕ 予防保全はNG（−{fb.ngHits.length*15}点）</div><div className="text-sm text-slate-700 mt-1">当社の方針として予防保全は行いません（{fb.ngHits.join('、')}）。原因の修理・設定の適正化は「管理をする」としてOKです。</div></div>)}
 
-     {q.graph && (
+     {q.graph && q.graph.note && (
        <div className="mt-4 p-3 rounded-xl" style={{background:'#f8fafc',border:'1px solid #e2e8f0'}}>
-         <div className="font-bold text-slate-700 mb-1">📈 見るべきiXacsグラフ（ここを見る）</div>
-         <GraphView graph={q.graph}/>
+         <div className="font-bold text-slate-700 mb-1">📈 グラフの見方（ここを見る）</div>
+         <div className="text-sm wmark" style={{color:'#b45309'}}>👀 {q.graph.note}</div>
        </div>
      )}
 
@@ -676,7 +692,7 @@ function Feedback({q,fb,idx,total,onNext}){
        </div>
      )}
 
-     <div className="text-center mt-5"><button onClick={onNext} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#f97316,#fb923c)'}}>{idx+1>=total?'最終結果へ':((idx+1)%3===0?'チェックポイント判定へ':'次の問題へ')}</button></div>
+     <div className="text-center mt-5"><button onClick={onNext} className="btn px-10 py-3 text-white" style={{background:'linear-gradient(90deg,#f97316,#fb923c)'}}>{idx+1>=total?'結果・役職判定へ':'次の問題へ'}</button></div>
    </div>
   );
 }
@@ -791,13 +807,9 @@ function App(){
     const e={_id:'e'+Date.now()+Math.floor(Math.random()*1000),name:player.name,dept:player.dept,avg,date:Date.now(),cleared};
     saveEntry(e); pushShared(e); setMe(e); };
   const onDone=(res)=>{
-    const all=[...results,res]; setResults(all); const n=all.length;
-    const cpDef=CHECKPOINTS.find(c=>c.at===n);
-    if(cpDef){
-      const yen=all.reduce((s,r)=>s+yenOf(r.score),0); const passed=yen>=cpDef.target;
-      setCp({cpIndex:CHECKPOINTS.indexOf(cpDef),passed,yen,target:cpDef.target,isLast:n>=SESSION_N});
-      setPhase('checkpoint');
-    } else { setIdx(idx+1); }
+    const all=[...results,res]; setResults(all);
+    if(all.length>=SESSION_N){ finish(all,true); setPhase('summary'); }
+    else setIdx(idx+1);
   };
   const afterCP=()=>{
     if(!cp.passed){ finish(results,false); setPhase('gameover'); return; }
