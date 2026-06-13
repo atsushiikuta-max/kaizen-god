@@ -568,7 +568,39 @@ const GRAPH_QS=[
    {c:'チョコ停を無くす',t:'ばらつきの中のチョコ停・遅い回を層別して潰す',kw:['チョコ停','層別','遅い','潰']}]),
 ];
 
-const POOL = QUESTIONS.concat(GRAPH_QS).concat(GEN_QUESTIONS);
+/* ===== 設備×上位概念 マトリックス（添付Excel 上位概念＊設備_v1 より） ===== */
+const MATRIX = {
+ '洗浄機':{'要るの？':['不要エアーブロー工程廃止','自動ブロー時間短縮','洗浄確認作業廃止'],'待ちを無くす':['排液時間短縮','扉開閉確認時間短縮','完了タイマー短縮','液温立上り短縮'],'同時に行う':['取出し＋ブロー同時化','扉閉め＋クランプ同時化','洗浄＋切粉除去同時化'],'距離を短く':['扉ストローク短縮','搬送位置変更','原点位置変更','ノズル位置最適化'],'付帯作業を無くす':['チェックバルブ設置','設備内ブラシ設置','手動ブロー廃止'],'気遣いを無くす':['ワークガイド設置','治具向き統一','受け形状変更'],'速度を速く':['扉開閉高速化','ポンプ流量向上','噴射圧向上','搬送速度向上'],'管理をする':['条件最適化','実績比較標準化','液面管理'],'チョコ停を無くす':['切粉詰まり防止','引っ掛かり防止','誤検知防止','ノズル詰まり対策']},
+ 'マシニング':{'要るの？':['エアカット削減','不要測定廃止','加工工程統合'],'待ちを無くす':['ATC待ち短縮','起動待ち短縮','工具交換待ち短縮'],'同時に行う':['加工＋切粉排出同時化','加工＋測定同時化'],'距離を短く':['工具移動距離短縮','原点位置最適化'],'付帯作業を無くす':['切粉清掃削減','工具段取り削減'],'気遣いを無くす':['治具ガイド化','ワークセット簡単化'],'速度を速く':['送り速度向上','ATC高速化'],'管理をする':['切削条件最適化','工具寿命管理'],'チョコ停を無くす':['工具欠損防止','切粉噛み込み防止']},
+ '溶接機':{'要るの？':['不要タクト工程廃止','不要確認廃止'],'待ちを無くす':['クランプ待ち短縮','起動待ち短縮'],'同時に行う':['位置決め＋クランプ同時化'],'距離を短く':['トーチ移動距離短縮'],'付帯作業を無くす':['スパッタ除去削減'],'気遣いを無くす':['治具ポカヨケ化'],'速度を速く':['トーチ移動高速化'],'管理をする':['溶接条件標準化'],'チョコ停を無くす':['ワイヤ供給異常防止']},
+ 'プレス':{'要るの？':['不要検査廃止'],'待ちを無くす':['材料供給待ち短縮'],'同時に行う':['供給＋搬送同時化'],'距離を短く':['材料搬送距離短縮'],'付帯作業を無くす':['金型清掃削減'],'気遣いを無くす':['材料セット容易化'],'速度を速く':['プレス速度向上'],'管理をする':['金型条件管理'],'チョコ停を無くす':['材料詰まり防止']},
+ '組付機':{'要るの？':['不要締付工程廃止'],'待ちを無くす':['部品供給待ち短縮'],'同時に行う':['締付＋検査同時化'],'距離を短く':['部品配置最適化'],'付帯作業を無くす':['部品準備削減'],'気遣いを無くす':['ポカヨケ化'],'速度を速く':['締付速度向上'],'管理をする':['トルク管理'],'チョコ停を無くす':['部品噛み込み防止']},
+ '熱処理炉':{'要るの？':['不要昇温工程削減'],'待ちを無くす':['昇温待ち短縮'],'同時に行う':['搬送＋冷却同時化'],'距離を短く':['搬送距離短縮'],'付帯作業を無くす':['治具交換削減'],'気遣いを無くす':['投入方向統一'],'速度を速く':['昇温速度向上'],'管理をする':['温度条件管理'],'チョコ停を無くす':['ワーク詰まり防止']},
+ '検査機':{'要るの？':['重複検査廃止'],'待ちを無くす':['判定待ち短縮'],'同時に行う':['測定＋判定同時化'],'距離を短く':['ワーク搬送距離短縮'],'付帯作業を無くす':['記録作業削減'],'気遣いを無くす':['判定基準明確化'],'速度を速く':['測定速度向上'],'管理をする':['判定条件管理'],'チョコ停を無くす':['誤判定防止']},
+ '搬送装置':{'要るの？':['不要搬送廃止'],'待ちを無くす':['搬送待ち短縮'],'同時に行う':['搬送＋受渡し同時化'],'距離を短く':['搬送ルート短縮'],'付帯作業を無くす':['手動搬送廃止'],'気遣いを無くす':['位置決め容易化'],'速度を速く':['搬送速度向上'],'管理をする':['搬送量管理'],'チョコ停を無くす':['搬送異常防止']},
+};
+const kwOf = t => { const out=new Set(); (t.match(/[ァ-ヶー]{2,}|[一-龯]{2,}/g)||[]).forEach(w=>{ out.add(w); if(/^[一-龯]{3,}$/.test(w)){ out.add(w.slice(0,2)); out.add(w.slice(-2)); } }); return Array.from(out); };
+const suggestFor = (ref,c) => { const m=ref&&MATRIX[ref]&&MATRIX[ref][c]; if(m&&m.length) return m.join(' ／ '); return (CONCEPT_BANK[c]?CONCEPT_BANK[c][0].t:''); };
+
+/* マトリックスから問題を生成（複合＝異なる上位概念で／単一概念＝その視点で） */
+const MATRIX_QS = [];
+Object.keys(MATRIX).forEach(setsubi=>{
+  MATRIX_QS.push({id:'mx_'+setsubi, type:'上位概念と対策', setsubi, nerai:'サイクルタイム短縮', format:'multi', target:3, keyConcept:'設備:'+setsubi, matrixRef:setsubi, cases:[],
+    toi:`「${setsubi}」はサイクルタイム(CT)が長いことが課題になっています。だから、この設備に対して、異なる上位概念の対策を「一つずつ・合計3つ以上」挙げてください。`});
+});
+MATRIX_QS.push({id:'mx_senjo5', type:'上位概念と対策', setsubi:'洗浄機', nerai:'CT短縮', genshou:['洗浄 20秒','エアーブロー 15秒','乾燥 25秒','扉開閉 10秒'], format:'multi', target:5, keyConcept:'設備:洗浄機CT', matrixRef:'洗浄機', cases:[],
+  toi:'洗浄機は「洗浄20秒＋エアーブロー15秒＋乾燥25秒＋扉開閉10秒」でCTが長いことが問題になっています。だから、上位概念別に改善案を5個以上挙げてください。'});
+[['洗浄機','待ちを無くす'],['洗浄機','距離を短く'],['洗浄機','チョコ停を無くす'],['洗浄機','同時に行う'],['マシニング','要るの？'],['マシニング','待ちを無くす'],['マシニング','同時に行う'],['マシニング','気遣いを無くす']].forEach(([setsubi,concept])=>{
+  const items=((MATRIX[setsubi]||{})[concept])||[]; if(items.length<2) return;
+  MATRIX_QS.push({id:'mx_'+setsubi+'_'+concept, type:'上位概念と対策', setsubi, nerai:'CT短縮', format:'single', lens:concept, keyConcept:concept, matrixRef:setsubi, cases:[],
+    toi:`「${setsubi}」でCTが長いことが課題です。だから、「${concept}」の視点から、この設備でできる具体的な改善案を3つ挙げてください。`,
+    points: items.map((t,i)=>({c:concept, key:i===0, t, kw:kwOf(t)}))});
+});
+
+/* 手作り問題に出題形式を付与（上位概念指定あり=single／なし=multi） */
+QUESTIONS.forEach(q=>{ if(q.type!=='グラフの読み方' && !q.format) q.format = q.lens?'single':'multi'; });
+
+const POOL = QUESTIONS.concat(GRAPH_QS).concat(MATRIX_QS);
 const QMAP = {}; POOL.forEach(q=>QMAP[q.id]=q);
 const NG = ['予防保全','定期交換','定期点検','オーバーホール'];
 
@@ -611,19 +643,20 @@ function conceptOfLine(line){
   });
   return best?{c:best,t:bestT}:null;
 }
-function gradeMulti(ans){
+function gradeMulti(ans, target){
+  target = target||3;
   const lines = ans.split(/\n+/).map(s=>s.trim()).filter(Boolean);
   const items = lines.length>=2 ? lines : ans.split(/[、,／\/]+/).map(s=>s.trim()).filter(Boolean);
   const seen=new Set(), covered=[];
   items.forEach(line=>{ const r=conceptOfLine(line); if(r && !seen.has(r.c)){ seen.add(r.c); covered.push(r); } });
   const ngHits = NG.filter(n=>norm(ans).includes(norm(n)));
   const distinct = covered.length;
-  let s = distinct>=4?100 : distinct===3?92 : distinct===2?70 : distinct===1?45 : (ans.trim().length>6?15:0);
+  let s = distinct>=target ? 92+Math.min(8,(distinct-target)*4) : Math.round(distinct/target*80)+(distinct>0?10:0);
   s -= ngHits.length*15;
   s = Math.max(0, Math.min(100, Math.round(s)));
   const have = covered.map(x=>x.c);
   const missing = Object.keys(CONCEPT_BANK).filter(c=>have.indexOf(c)<0);
-  return {multi:true, score:s, covered, distinct, missing, ngHits};
+  return {multi:true, score:s, covered, distinct, target, missing, ngHits};
 }
 
 /* ===== ランキング保存 ===== */
@@ -897,8 +930,9 @@ function Start({onStart,onRanking}){
 /* ===== クイズ ===== */
 function Quiz({q,idx,total,results,onDone}){
   const [ans,setAns]=useState(''); const [fb,setFb]=useState(null);
-  const multi = q.type!=='グラフの読み方';
-  const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(multi?gradeMulti(ans):grade(q,ans)); };
+  const multi = q.format==='multi';
+  const target = q.target||3;
+  const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(multi?gradeMulti(ans,target):grade(q,ans)); };
   return (
    <div className="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-4 gap-4 items-start">
      {/* 左：上位概念（縦並び・常時表示） */}
@@ -917,23 +951,23 @@ function Quiz({q,idx,total,results,onDone}){
 
        <div className="card p-5 mt-3 pop">
          <div className="text-xs font-bold text-slate-400">設 備</div>
-         <div className="text-lg font-bold text-slate-800 wmark">{q.setsubi}</div>
-         {(q.kotei||q.nerai) && <div className="text-xs text-slate-500 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
+         <div className="text-2xl font-black text-slate-900 wmark">{q.setsubi}</div>
+         {(q.kotei||q.nerai) && <div className="text-base font-bold text-slate-600 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
          {q.lens && !multi && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
          {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
          {q.graph && <div className="mt-3"><div className="text-xs font-bold text-slate-400 mb-1">グラフ</div><GraphView graph={q.graph} hideNote/></div>}
-         <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800">{multi?MULTI_PROMPT:q.toi}</span></div>
+         <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800 text-base">{q.toi}</span></div>
        </div>
 
        <div className="mt-3">
-         <div className="text-xs text-slate-500 mb-1">{multi?'あなたの回答（異なる上位概念の対策を1行ずつ、3つ。「上位概念：対策」の形で書くと分かりやすい）':'あなたの回答（考えられる要因・確認すべきことを挙げてください）'}</div>
-         <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6} placeholder={multi?'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止\n管理をする：圧力・流量を適正化する':'例）標準作業を守れているか／品番切替が正しいか／作業者差…'} className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
+         <div className="text-xs text-slate-500 mb-1">{multi?`あなたの回答（異なる上位概念の対策を1行ずつ、合計${target}つ以上。「上位概念：対策」の形がおすすめ）`:(q.format==='single'?'あなたの回答（この上位概念の改善案を1行ずつ挙げてください）':'あなたの回答（考えられる要因・確認すべきことを挙げてください）')}</div>
+         <textarea value={ans} onChange={e=>setAns(e.target.value)} disabled={!!fb} rows={6} placeholder={multi?'例）待ちを無くす：昼休み・終業後に電源OFF\n要るの？：不要なエアーブロー工程を廃止\n管理をする：圧力・流量を適正化する':(q.format==='single'?'例）動作ストロークを短くする\n起動スイッチを近くに移動する':'例）標準作業を守れているか／品番切替が正しいか／作業者差…')} className="w-full border border-slate-300 rounded-xl p-3 wmark"/>
        </div>
 
        {!fb ? (
          <div className="text-center mt-4"><button disabled={ans.trim().length===0} onClick={submit} className="btn px-10 py-3 text-white" style={{background:ans.trim()?'linear-gradient(90deg,#0ea5e9,#22c55e)':'#cbd5e1'}}>採点する</button></div>
        ) : (
-         <Feedback q={q} fb={fb} idx={idx} total={total} onNext={()=>onDone({qid:q.id,type:q.type,keyConcept:q.keyConcept,keyCovered:fb.multi?(fb.distinct>=3):fb.keyCovered,score:fb.score})}/>
+         <Feedback q={q} fb={fb} idx={idx} total={total} onNext={()=>onDone({qid:q.id,type:q.type,keyConcept:q.keyConcept,keyCovered:fb.multi?(fb.distinct>=(fb.target||3)):fb.keyCovered,score:fb.score})}/>
        )}
      </div>
      {/* 右：経営ダッシュボード */}
@@ -949,15 +983,15 @@ function Feedback({q,fb,idx,total,onNext}){
   return (
    <div className="card p-5 mt-4 pop">
      <div className="text-center"><span className="text-5xl font-black" style={{color:cls}}>{fb.score}</span><span className="text-slate-500 font-bold"> / 100点</span>{fb.multi
-       ? <span className="text-sm font-bold ml-2" style={{color:fb.distinct>=3?'#16a34a':'#ea580c'}}>異なる上位概念 {fb.distinct}/3</span>
+       ? <span className="text-sm font-bold ml-2" style={{color:fb.distinct>=fb.target?'#16a34a':'#ea580c'}}>異なる上位概念 {fb.distinct}/{fb.target}</span>
        : <span className="text-sm text-slate-400 ml-2">(改善額 {yfmt(yenOf(fb.score))})</span>}</div>
 
      {fb.multi ? (
        <div>
          {fb.covered.length>0 && (<div className="mt-4"><div className="font-bold" style={{color:'#16a34a'}}>✅ 使えた上位概念（{fb.distinct}種類）</div><ul className="mt-1 space-y-1">{fb.covered.map((x,i)=><li key={i} className="text-sm wmark"><Chip c={x.c}/>{x.t}</li>)}</ul></div>)}
-         {fb.distinct<3
-           ? (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ あと{3-fb.distinct}個、別の上位概念の対策を挙げましょう</div><div className="text-xs text-slate-500 mt-1">例（まだ使っていない上位概念）：</div><ul className="mt-1 space-y-1">{fb.missing.slice(0,4).map((c,i)=><li key={i} className="text-sm text-slate-700 wmark"><Chip c={c}/>{CONCEPT_BANK[c][0].t}</li>)}</ul></div>)
-           : (<div className="mt-4 p-3 rounded-xl text-emerald-700 font-bold" style={{background:'#ecfdf5',border:'1px solid #a7f3d0'}}>◎ 3つ以上の異なる上位概念で対策できています！素晴らしい！</div>)}
+         {fb.distinct<fb.target
+           ? (<div className="mt-4 p-3 rounded-xl" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}><div className="font-bold text-orange-700">⚠ あと{fb.target-fb.distinct}個、別の上位概念の対策を挙げましょう</div><div className="text-xs text-slate-500 mt-1">{q.matrixRef?`「${q.matrixRef}」での具体例（まだ使っていない上位概念）：`:'例（まだ使っていない上位概念）：'}</div><ul className="mt-1 space-y-1">{fb.missing.slice(0,5).map((c,i)=><li key={i} className="text-sm text-slate-700 wmark"><Chip c={c}/>{suggestFor(q.matrixRef,c)}</li>)}</ul></div>)
+           : (<div className="mt-4 p-3 rounded-xl text-emerald-700 font-bold" style={{background:'#ecfdf5',border:'1px solid #a7f3d0'}}>◎ {fb.target}つ以上の異なる上位概念で対策できています！素晴らしい！</div>)}
        </div>
      ) : (
        <div>
