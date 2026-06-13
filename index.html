@@ -19,7 +19,7 @@
   textarea:focus,select:focus,input:focus{outline:2px solid #2563eb}
   .wmark{white-space:pre-wrap;word-break:break-word}
   .chart{width:100%;height:auto;background:#fff;border:1px solid #e5e9f0;border-radius:10px}
-  .chart .ax{font-size:9px;fill:#94a3b8}.chart .lg{font-size:11px;fill:#475569}
+  .chart .ax{font-size:12px;fill:#94a3b8}.chart .lg{font-size:14px;fill:#475569}
 </style>
 </head>
 <body>
@@ -750,15 +750,15 @@ function PowerChart(){
   );
 }
 function BarChart({data,hi}){
-  const W=560,H=40+data.length*30,padL=120,padR=40,padT=10;
+  const W=560,H=44+data.length*38,padL=128,padR=46,padT=10;
   const mx=Math.max(...data.map(d=>d[1]),1), pw=W-padL-padR;
   return (
    <svg viewBox={`0 0 ${W} ${H}`} className="chart">
-    {data.map((d,i)=>{const y=padT+i*30, w=(d[1]/mx)*pw, fill=i===hi?'#ef4444':'#94a3b8';
+    {data.map((d,i)=>{const y=padT+i*38, w=(d[1]/mx)*pw, fill=i===hi?'#ef4444':'#94a3b8';
       return (<g key={i}>
-        <text x={padL-8} y={y+15} textAnchor="end" style={{fontSize:12,fill:'#334155'}}>{d[0]}</text>
-        <rect x={padL} y={y+3} width={Math.max(2,w)} height={18} rx="3" fill={fill}/>
-        <text x={padL+w+5} y={y+16} style={{fontSize:11,fill:'#64748b',fontWeight:700}}>{d[1]}</text>
+        <text x={padL-10} y={y+19} textAnchor="end" style={{fontSize:16,fill:'#334155',fontWeight:600}}>{d[0]}</text>
+        <rect x={padL} y={y+4} width={Math.max(2,w)} height={24} rx="4" fill={fill}/>
+        <text x={padL+w+7} y={y+22} style={{fontSize:15,fill:'#64748b',fontWeight:700}}>{d[1]}</text>
       </g>);})}
    </svg>
   );
@@ -934,7 +934,7 @@ function Quiz({q,idx,total,results,onDone}){
   const target = q.target||3;
   const submit=()=>{ if(fb||ans.trim().length===0)return; setFb(multi?gradeMulti(ans,target):grade(q,ans)); };
   return (
-   <div className="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-4 gap-4 items-start">
+   <div className="max-w-7xl mx-auto px-4 py-6 grid lg:grid-cols-5 gap-4 items-start">
      {/* 左：上位概念（縦並び・常時表示） */}
      <div className="lg:col-span-1 order-2 lg:order-1">
        <div className="card p-3 lg:sticky lg:top-4">
@@ -943,19 +943,20 @@ function Quiz({q,idx,total,results,onDone}){
        </div>
      </div>
      {/* 中央：問題 */}
-     <div className="lg:col-span-2 order-1 lg:order-2">
+     <div className="lg:col-span-3 order-1 lg:order-2">
        <div className="flex items-center justify-between text-sm">
          <div className="font-bold text-slate-500">第 {idx+1} / {total} 問 ｜ {q.type}</div>
        </div>
        <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden"><div className="h-full" style={{width:`${(idx/total)*100}%`,background:'linear-gradient(90deg,#0ea5e9,#22c55e)'}}/></div>
 
        <div className="card p-5 mt-3 pop">
-         <div className="text-xs font-bold text-slate-400">設 備</div>
-         <div className="text-2xl font-black text-slate-900 wmark">{q.setsubi}</div>
-         {(q.kotei||q.nerai) && <div className="text-base font-bold text-slate-600 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
-         {q.lens && !multi && <div className="mt-3"><div className="text-xs font-bold text-slate-400">上位概念</div><Chip c={q.lens}/></div>}
+         <div className="text-sm font-bold text-slate-400">設 備</div>
+         <div className="text-3xl font-black text-slate-900 wmark">{q.setsubi}</div>
+         {(q.kotei||q.nerai) && <div className="text-lg font-bold text-slate-600 mt-1 wmark">{q.kotei?`工程：${q.kotei}`:''}{q.kotei&&q.nerai?'　／　':''}{q.nerai?`狙い：${q.nerai}`:''}</div>}
+         {q.lens && !multi && <div className="mt-3"><div className="text-sm font-bold text-slate-400">上位概念</div>
+           <span className="inline-block text-3xl font-black px-4 py-1 rounded-2xl mt-1 wmark" style={{background:(CMAP[q.lens]||'#64748b')+'1f',color:CMAP[q.lens]||'#475569',border:`2px solid ${(CMAP[q.lens]||'#64748b')}66`}}>{q.lens}</span></div>}
          {q.genshou && <div className="mt-3"><div className="text-xs font-bold text-slate-400">現 象</div><ul className="list-disc pl-5 text-slate-700">{q.genshou.map((g,i)=><li key={i} className="wmark">{g}</li>)}</ul></div>}
-         {q.graph && <div className="mt-3"><div className="text-xs font-bold text-slate-400 mb-1">グラフ</div><GraphView graph={q.graph} hideNote/></div>}
+         {q.graph && <div className="mt-3"><div className="text-sm font-bold text-slate-400 mb-1">グラフ</div><GraphView graph={q.graph} hideNote/></div>}
          <div className="mt-4 p-3 rounded-xl wmark" style={{background:'#eff6ff',borderLeft:'4px solid #2563eb'}}><span className="font-bold text-slate-800 text-base">{q.toi}</span></div>
        </div>
 
